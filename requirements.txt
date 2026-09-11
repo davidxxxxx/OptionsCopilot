@@ -1,0 +1,7 @@
+cryptography>=42
+fastapi>=0.110
+ib-insync>=0.9.86
+pydantic>=2.6
+pywin32>=306; sys_platform == "win32"
+tzdata>=2024.1; sys_platform == "win32"
+uvicorn>=0.29

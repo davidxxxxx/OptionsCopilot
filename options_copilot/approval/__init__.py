@@ -1,0 +1,60 @@
+"""Short-lived, replay-safe GUI approval boundary."""
+
+from .store import (
+    ActiveApprovalExists,
+    APPROVAL_CONFIRMATION_TOKEN,
+    APPROVAL_TTL_SECONDS,
+    BROKER_PROOF_SCHEMA,
+    STRATEGY_NAV_PROOF_SCHEMA,
+    ApprovalAuthorityBinding,
+    ApprovalAuthorityConflict,
+    ApprovalChallengeConsumption,
+    ApprovalChallengeRecord,
+    ApprovalChallengeRejected,
+    ApprovalConfirmation,
+    ApprovalConsumption,
+    ApprovalError,
+    ApprovalIdentityConflict,
+    ApprovalRecord,
+    ApprovalValidation,
+    DEFAULT_ADVERSE_TOLERANCE_USD,
+    MAX_ADVERSE_TOLERANCE_USD,
+    NonceReplayError,
+    IssuedApprovalChallenge,
+    ProposalApprovalStore,
+    ProposalHashes,
+    hash_proposal,
+    proposal_hashes,
+)
+
+# A service-style name is convenient for the GUI/API integration layer while
+# retaining the accurate durable-store name for direct use.
+ProposalApprovalService = ProposalApprovalStore
+
+__all__ = [
+    "ActiveApprovalExists",
+    "APPROVAL_CONFIRMATION_TOKEN",
+    "APPROVAL_TTL_SECONDS",
+    "BROKER_PROOF_SCHEMA",
+    "STRATEGY_NAV_PROOF_SCHEMA",
+    "ApprovalAuthorityBinding",
+    "ApprovalAuthorityConflict",
+    "ApprovalChallengeConsumption",
+    "ApprovalChallengeRecord",
+    "ApprovalChallengeRejected",
+    "ApprovalConfirmation",
+    "ApprovalConsumption",
+    "ApprovalError",
+    "ApprovalIdentityConflict",
+    "ApprovalRecord",
+    "ApprovalValidation",
+    "DEFAULT_ADVERSE_TOLERANCE_USD",
+    "MAX_ADVERSE_TOLERANCE_USD",
+    "NonceReplayError",
+    "IssuedApprovalChallenge",
+    "ProposalApprovalService",
+    "ProposalApprovalStore",
+    "ProposalHashes",
+    "hash_proposal",
+    "proposal_hashes",
+]

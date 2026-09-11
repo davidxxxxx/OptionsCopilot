@@ -1,0 +1,108 @@
+"""Public contracts for the durable G035 equity opportunity pool."""
+
+from .allocator import DEFAULT_POLICY, EquityPoolAllocator, EquityPoolPolicy
+from .classification import (
+    LOCAL_EXACT_MAPPING,
+    MEGA_CAP_TECH_SYMBOLS,
+    classify_security,
+)
+from .models import (
+    COMPANY_SECTORS,
+    ETF_BUCKETS,
+    TAXONOMY_HASH,
+    TAXONOMY_VERSION,
+    CanonicalClassification,
+    ClassificationSource,
+    DirectionLabel,
+    EquityCategory,
+    EquityPoolInput,
+    EquityPoolSnapshot,
+    EquityScore,
+    FactorEvidence,
+    FactorKind,
+    FactorStatus,
+    LiquidityEvidence,
+    PoolDecision,
+    PoolDisposition,
+    PositionMode,
+)
+from .scoring import (
+    FACTOR_WEIGHTS,
+    SCORING_HASH,
+    SCORING_VERSION,
+    score_equity,
+)
+from .service import (
+    EquityPoolBuildResult,
+    EquityPoolService,
+    read_hash_bound_factor,
+    read_hash_bound_liquidity,
+    read_runtime_factor,
+    read_runtime_liquidity,
+)
+from .reference import normalize_equity_pool_reference
+from .evidence_cache import (
+    UnderlyingEvidenceCache,
+    UnderlyingEvidenceCacheCorruption,
+    UnderlyingEvidenceReadView,
+    UnderlyingEvidenceRecord,
+    captured_record_from_quote,
+    captured_records_from_quotes,
+)
+from .store import (
+    EquityPoolStore,
+    EquityPoolStoreConflict,
+    EquityPoolStoreCorruption,
+    EquityPoolStoreError,
+    StoredEquityPoolSnapshot,
+)
+
+
+__all__ = [
+    "COMPANY_SECTORS",
+    "DEFAULT_POLICY",
+    "ETF_BUCKETS",
+    "FACTOR_WEIGHTS",
+    "LOCAL_EXACT_MAPPING",
+    "MEGA_CAP_TECH_SYMBOLS",
+    "SCORING_HASH",
+    "SCORING_VERSION",
+    "TAXONOMY_HASH",
+    "TAXONOMY_VERSION",
+    "CanonicalClassification",
+    "ClassificationSource",
+    "DirectionLabel",
+    "EquityCategory",
+    "EquityPoolAllocator",
+    "EquityPoolInput",
+    "EquityPoolBuildResult",
+    "EquityPoolService",
+    "EquityPoolPolicy",
+    "EquityPoolSnapshot",
+    "EquityPoolStore",
+    "EquityPoolStoreConflict",
+    "EquityPoolStoreCorruption",
+    "EquityPoolStoreError",
+    "EquityScore",
+    "FactorEvidence",
+    "FactorKind",
+    "FactorStatus",
+    "LiquidityEvidence",
+    "PoolDecision",
+    "PoolDisposition",
+    "PositionMode",
+    "StoredEquityPoolSnapshot",
+    "classify_security",
+    "score_equity",
+    "normalize_equity_pool_reference",
+    "UnderlyingEvidenceCache",
+    "UnderlyingEvidenceCacheCorruption",
+    "UnderlyingEvidenceReadView",
+    "UnderlyingEvidenceRecord",
+    "captured_record_from_quote",
+    "captured_records_from_quotes",
+    "read_hash_bound_factor",
+    "read_hash_bound_liquidity",
+    "read_runtime_factor",
+    "read_runtime_liquidity",
+]

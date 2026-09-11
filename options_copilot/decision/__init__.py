@@ -1,0 +1,45 @@
+"""Authority-free decision orchestration."""
+
+from .gates import (
+    CandidateGateResult,
+    GateAuthority,
+    GateBundle,
+    GateId,
+    GateLayerResult,
+    GateRoutingContext,
+    GateStatus,
+    PipelineGateOutcome,
+    ProvisionalWatchGatePreview,
+    RankingGateContext,
+    SourceComponentStatus,
+    SourceDisposition,
+    SupportingInput,
+    SupportingStatus,
+    WatchLayerPreview,
+    candidate_gate_key,
+    classify_source_availability,
+)
+from .pipeline import DecisionPipeline, PipelineResult, normalize_funnel_trace
+
+__all__ = [
+    "CandidateGateResult",
+    "DecisionPipeline",
+    "GateAuthority",
+    "GateBundle",
+    "GateId",
+    "GateLayerResult",
+    "GateRoutingContext",
+    "GateStatus",
+    "PipelineGateOutcome",
+    "PipelineResult",
+    "ProvisionalWatchGatePreview",
+    "RankingGateContext",
+    "SourceComponentStatus",
+    "SourceDisposition",
+    "SupportingInput",
+    "SupportingStatus",
+    "WatchLayerPreview",
+    "candidate_gate_key",
+    "classify_source_availability",
+    "normalize_funnel_trace",
+]

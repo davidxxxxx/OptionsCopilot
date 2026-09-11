@@ -1,0 +1,1255 @@
+{
+  "asvs": {
+    "applicable_l1_ids": [
+      "V2.1.1",
+      "V2.2.1",
+      "V2.2.2",
+      "V2.3.1",
+      "V4.1.1",
+      "V5.3.2",
+      "V8.3.1",
+      "V11.4.1",
+      "V12.1.1",
+      "V12.2.1",
+      "V12.2.2",
+      "V14.2.1",
+      "V15.3.1"
+    ],
+    "controls": [
+      {
+        "description": "Verify that the application protects against Server-side Request Forgery (SSRF) attacks, by validating untrusted data against an allowlist of protocols, domains, paths and ports and sanitizing potentially dangerous characters before using the data to call another service.",
+        "id": "V1.3.6",
+        "level": "L2"
+      },
+      {
+        "description": "Verify that only approved hash functions are used for general cryptographic use cases, including digital signatures, HMAC, KDF, and random bit generation. Disallowed hash functions, such as MD5, must not be used for any cryptographic purpose.",
+        "id": "V11.4.1",
+        "level": "L1"
+      },
+      {
+        "description": "Verify that only the latest recommended versions of the TLS protocol are enabled, such as TLS 1.2 and TLS 1.3. The latest version of the TLS protocol must be the preferred option.",
+        "id": "V12.1.1",
+        "level": "L1"
+      },
+      {
+        "description": "Verify that TLS is used for all connectivity between a client and external facing, HTTP-based services, and does not fall back to insecure or unencrypted communications.",
+        "id": "V12.2.1",
+        "level": "L1"
+      },
+      {
+        "description": "Verify that external facing services use publicly trusted TLS certificates.",
+        "id": "V12.2.2",
+        "level": "L1"
+      },
+      {
+        "description": "Verify that an allowlist is used to define the external resources or systems with which the application is permitted to communicate (e.g., for outbound requests, data loads, or file access). This allowlist can be implemented at the application layer, web server, firewall, or a combination of different layers.",
+        "id": "V13.2.4",
+        "level": "L2"
+      },
+      {
+        "description": "Verify that sensitive data is only sent to the server in the HTTP message body or header fields, and that the URL and query string do not contain sensitive information, such as an API key or session token.",
+        "id": "V14.2.1",
+        "level": "L1"
+      },
+      {
+        "description": "Verify that the application only returns the required subset of fields from a data object. For example, it should not return an entire data object, as some individual fields should not be accessible to users.",
+        "id": "V15.3.1",
+        "level": "L1"
+      },
+      {
+        "description": "Verify that where the application backend makes calls to external URLs, it is configured to not follow redirects unless it is intended functionality.",
+        "id": "V15.3.2",
+        "level": "L2"
+      },
+      {
+        "description": "Verify that the application continues to operate securely when external resource access fails, for example, by using patterns such as circuit breakers or graceful degradation.",
+        "id": "V16.5.2",
+        "level": "L2"
+      },
+      {
+        "description": "Verify that the application's documentation defines input validation rules for how to check the validity of data items against an expected structure. This could be common data formats such as credit card numbers, email addresses, telephone numbers, or it could be an internal data format.",
+        "id": "V2.1.1",
+        "level": "L1"
+      },
+      {
+        "description": "Verify that input is validated to enforce business or functional expectations for that input. This should either use positive validation against an allow list of values, patterns, and ranges, or be based on comparing the input to an expected structure and logical limits according to predefined rules. For L1, this can focus on input which is used to make specific business or security decisions. For L2 and up, this should apply to all input.",
+        "id": "V2.2.1",
+        "level": "L1"
+      },
+      {
+        "description": "Verify that the application is designed to enforce input validation at a trusted service layer. While client-side validation improves usability and should be encouraged, it must not be relied upon as a security control.",
+        "id": "V2.2.2",
+        "level": "L1"
+      },
+      {
+        "description": "Verify that the application will only process business logic flows for the same user in the expected sequential step order and without skipping steps.",
+        "id": "V2.3.1",
+        "level": "L1"
+      },
+      {
+        "description": "Verify that every HTTP response with a message body contains a Content-Type header field that matches the actual content of the response, including the charset parameter to specify safe character encoding (e.g., UTF-8, ISO-8859-1) according to IANA Media Types, such as \"text/\", \"/+xml\" and \"/xml\".",
+        "id": "V4.1.1",
+        "level": "L1"
+      },
+      {
+        "description": "Verify that when the application creates file paths for file operations, instead of user-submitted filenames, it uses internally generated or trusted data, or if user-submitted filenames or file metadata must be used, strict validation and sanitization must be applied. This is to protect against path traversal, local or remote file inclusion (LFI, RFI), and server-side request forgery (SSRF) attacks.",
+        "id": "V5.3.2",
+        "level": "L1"
+      },
+      {
+        "description": "Verify that the application enforces authorization rules at a trusted service layer and doesn't rely on controls that an untrusted consumer could manipulate, such as client-side JavaScript.",
+        "id": "V8.3.1",
+        "level": "L1"
+      }
+    ],
+    "project_l2_ids": [
+      "V1.3.6",
+      "V13.2.4",
+      "V15.3.2",
+      "V16.5.2"
+    ],
+    "source_url": "https://raw.githubusercontent.com/OWASP/ASVS/v5.0.0/5.0/docs_en/OWASP_Application_Security_Verification_Standard_5.0.0_en.flat.json",
+    "version": "5.0.0"
+  },
+  "mitigation_commands": [
+    {
+      "description": "Read-only API projections force supporting-only authority and omit order primitives.",
+      "id": "api_supporting_only",
+      "kind": "pytest",
+      "targets": [
+        "tests/options_copilot/test_api_frontend.py::test_frontend_fetches_only_local_read_models_and_has_no_direct_order_primitive",
+        "tests/options_copilot/test_api_frontend.py::test_news_api_preserves_conditional_option_contract_and_forces_supporting_only"
+      ]
+    },
+    {
+      "arguments": [
+        "--root",
+        "options_copilot",
+        "--json"
+      ],
+      "description": "Static call-graph audit rejects broker submit, transmit, and order-placement authority.",
+      "id": "authority_audit",
+      "kind": "static",
+      "module": "options_copilot.operations.authority_audit"
+    },
+    {
+      "description": "Authority-audit tests cover direct, aliased, protocol, inherited, and transitive write surfaces.",
+      "id": "authority_audit_tests",
+      "kind": "pytest",
+      "targets": [
+        "tests/options_copilot/test_authority_audit.py::test_direct_import_alias_attribute_call_and_constant_getattr_fail",
+        "tests/options_copilot/test_authority_audit.py::test_protocol_surface_and_inherited_unsafe_method_fail"
+      ]
+    },
+    {
+      "description": "Evidence tests reject secret-like payloads and canonical hash tampering.",
+      "id": "evidence_integrity",
+      "kind": "pytest",
+      "targets": [
+        "tests/options_copilot/test_evidence_store.py::test_secret_like_payload_and_hash_tampering_fail_closed"
+      ]
+    },
+    {
+      "description": "Provider transports enforce exact HTTPS destinations, redirect denial, bounded JSON, and sanitized failures.",
+      "id": "provider_transport",
+      "kind": "pytest",
+      "targets": [
+        "tests/options_copilot/test_event_providers.py::test_alpha_vantage_transport_failure_does_not_chain_token_bearing_url",
+        "tests/options_copilot/test_nasdaq_earnings_provider.py::test_https_transport_rejects_redirects_oversize_and_duplicate_json_keys",
+        "tests/options_copilot/test_official_calendar_provider.py::test_non_https_source_is_rejected_at_configuration_boundary",
+        "tests/options_copilot/test_sec_current_provider.py::test_https_transport_rejects_redirect_content_type_and_oversize"
+      ]
+    },
+    {
+      "description": "Reaction evidence preserves official conflicts, chronology, no-trade degradation, and supporting-only authority.",
+      "id": "reaction_integrity",
+      "kind": "pytest",
+      "targets": [
+        "tests/options_copilot/test_news_reaction.py::test_conflicting_same_vintage_official_releases_fail_closed",
+        "tests/options_copilot/test_news_reaction.py::test_supporting_payloads_cannot_claim_approval_instruction_or_order_authority"
+      ]
+    },
+    {
+      "description": "Security-gate tests pin the exact tagged ASVS inventory and fail structural or residual-risk drift.",
+      "id": "security_gate_contract",
+      "kind": "pytest",
+      "targets": [
+        "tests/options_copilot/test_phase2_security_gate.py::test_phase2_security_register_pins_exact_asvs_500_inventory"
+      ]
+    },
+    {
+      "description": "Workspace tests reject plan/manifest self-authorization and immutable plan-hash substitution.",
+      "id": "workspace_authority",
+      "kind": "pytest",
+      "targets": [
+        "tests/options_copilot/test_workspace_guard.py::test_phase_02_manifest_rejects_wrong_immutable_plan_hash",
+        "tests/options_copilot/test_workspace_guard.py::test_phase_02_plan_and_manifest_coedit_cannot_self_authorize_source"
+      ]
+    }
+  ],
+  "register_kind": "options_copilot.phase2_security_controls.v1",
+  "schema_version": 1,
+  "threats": [
+    {
+      "asvs_controls": [
+        {
+          "id": "V14.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V15.3.1",
+          "level": "L1"
+        }
+      ],
+      "category": "Information Disclosure",
+      "component": "P2-13 fixtures and recording client",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "api_supporting_only",
+        "evidence_integrity",
+        "provider_transport",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-01",
+      "plan_asvs": "V14.2.1 L1; V15.3.1 L1",
+      "rationale": "Recursive sentinel scans plus zero transport calls before cost/network.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-07"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V2.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Tampering",
+      "component": "P2-09..P2-14 hostile outputs",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-01",
+      "plan_asvs": "V2.2.1 L1; V2.2.2 L1",
+      "rationale": "Strict whole-object failure, exact binding, and no partial projection.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-08"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V2.3.1",
+          "level": "L1"
+        },
+        {
+          "id": "V8.3.1",
+          "level": "L1"
+        }
+      ],
+      "category": "Elevation of Privilege",
+      "component": "P2-20 production harness",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "api_supporting_only",
+        "authority_audit",
+        "authority_audit_tests",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-01",
+      "plan_asvs": "V8.3.1 L1; V2.3.1 L1",
+      "rationale": "Canonical byte equality and zero creator/broker write calls.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-09"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V1.3.6",
+          "level": "L2"
+        },
+        {
+          "id": "V12.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V12.2.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Spoofing",
+      "component": "provider URL/final URL",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "provider_transport",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-02",
+      "plan_asvs": "V12.2.1 L1; V12.2.2 L1; V1.3.6 L2 project control",
+      "rationale": "Exact HTTPS/default-port allowlists and no redirects.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-01"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V14.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V15.3.1",
+          "level": "L1"
+        }
+      ],
+      "category": "Information Disclosure",
+      "component": "credentials/failures",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "api_supporting_only",
+        "evidence_integrity",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-02",
+      "plan_asvs": "V14.2.1 L1; V15.3.1 L1",
+      "rationale": "Header allowlist, pre-egress scan, fixed codes, zero raw state.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-02"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V16.5.2",
+          "level": "L2"
+        }
+      ],
+      "category": "Denial of Service",
+      "component": "retry/deadline/oversize",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "provider_transport",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-02",
+      "plan_asvs": "No direct L1; V16.5.2 L2 project control",
+      "rationale": "One deadline, attempt caps, cap+1 read, closure.",
+      "residual_severity": "MEDIUM",
+      "threat_id": "T-02-03"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V2.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.2",
+          "level": "L1"
+        },
+        {
+          "id": "V4.1.1",
+          "level": "L1"
+        }
+      ],
+      "category": "Tampering",
+      "component": "content type/JSON",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "provider_transport",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-02",
+      "plan_asvs": "V2.2.1 L1; V2.2.2 L1; V4.1.1 L1",
+      "rationale": "Strict type/encoding/JSON rejection.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-04"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V16.5.2",
+          "level": "L2"
+        }
+      ],
+      "category": "Denial of Service",
+      "component": "pacing",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "provider_transport",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-02",
+      "plan_asvs": "No direct L1; V16.5.2 L2 project control",
+      "rationale": "Independent limiters and visible limited state.",
+      "residual_severity": "MEDIUM",
+      "threat_id": "T-02-05"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V2.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Spoofing",
+      "component": "six-source health",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "reaction_integrity",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-03",
+      "plan_asvs": "V2.2.1 L1; V2.2.2 L1",
+      "rationale": "Exact IDs and independent readiness/provenance.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-06"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V2.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Tampering",
+      "component": "precedence/entity merge",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "reaction_integrity",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-03",
+      "plan_asvs": "V2.2.1 L1; V2.2.2 L1",
+      "rationale": "Tier priority, lineage dedup, visible conflict, binding.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-10"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V2.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Tampering",
+      "component": "consensus assessment",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "reaction_integrity",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-03",
+      "plan_asvs": "V2.2.1 L1; V2.2.2 L1",
+      "rationale": "Immutable chronology and basis comparisons.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-11"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V15.3.1",
+          "level": "L1"
+        },
+        {
+          "id": "V4.1.1",
+          "level": "L1"
+        }
+      ],
+      "category": "Information Disclosure",
+      "component": "loopback projections",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "api_supporting_only",
+        "authority_audit",
+        "authority_audit_tests",
+        "evidence_integrity",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-03",
+      "plan_asvs": "V4.1.1 L1; V15.3.1 L1",
+      "rationale": "Strict allowlists, authority overwrite, sentinel tests.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-12"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V11.4.1",
+          "level": "L1"
+        },
+        {
+          "id": "V15.3.1",
+          "level": "L1"
+        },
+        {
+          "id": "V5.3.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Tampering / Information Disclosure",
+      "component": "checkpoint",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "api_supporting_only",
+        "evidence_integrity",
+        "security_gate_contract",
+        "workspace_authority"
+      ],
+      "owner_plan": "02-03",
+      "plan_asvs": "V5.3.2 L1; V11.4.1 L1; V15.3.1 L1",
+      "rationale": "G containment, exclusive create, canonical hash, redaction.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-13"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V14.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V15.3.1",
+          "level": "L1"
+        }
+      ],
+      "category": "Information Disclosure",
+      "component": "pre-egress snapshot",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "api_supporting_only",
+        "evidence_integrity",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-04",
+      "plan_asvs": "V14.2.1 L1; V15.3.1 L1",
+      "rationale": "Narrow allowlist, redaction, zero-call tests.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-07"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V2.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Tampering",
+      "component": "model payload",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-04",
+      "plan_asvs": "V2.2.1 L1; V2.2.2 L1",
+      "rationale": "Strict shape/binding and whole-object failure.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-08"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V2.3.1",
+          "level": "L1"
+        },
+        {
+          "id": "V8.3.1",
+          "level": "L1"
+        }
+      ],
+      "category": "Elevation of Privilege",
+      "component": "public envelope/enablement",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "api_supporting_only",
+        "authority_audit",
+        "authority_audit_tests",
+        "evidence_integrity",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-04",
+      "plan_asvs": "V8.3.1 L1; V2.3.1 L1",
+      "rationale": "Server-owned literals, no authority ports, evaluation-pending zero-call gate, P2-20.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-09"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V12.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V12.2.2",
+          "level": "L1"
+        },
+        {
+          "id": "V15.3.2",
+          "level": "L2"
+        }
+      ],
+      "category": "Spoofing",
+      "component": "DeepSeek URL/redirect",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "provider_transport",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-05",
+      "plan_asvs": "V12.2.1 L1; V12.2.2 L1; V15.3.2 L2 project control",
+      "rationale": "Exact validator, no redirects, final URL equality.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-01"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V14.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V15.3.1",
+          "level": "L1"
+        }
+      ],
+      "category": "Information Disclosure",
+      "component": "Authorization/errors",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "api_supporting_only",
+        "evidence_integrity",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-05",
+      "plan_asvs": "V14.2.1 L1; V15.3.1 L1",
+      "rationale": "Header allowlist and fixed sanitized failures.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-02"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V16.5.2",
+          "level": "L2"
+        }
+      ],
+      "category": "Denial of Service",
+      "component": "deadline/retries/body",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "provider_transport",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-05",
+      "plan_asvs": "No direct L1; V16.5.2 L2 project control",
+      "rationale": "6.5-second budget, 2 attempts, byte cap, close.",
+      "residual_severity": "MEDIUM",
+      "threat_id": "T-02-03"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V2.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.2",
+          "level": "L1"
+        },
+        {
+          "id": "V4.1.1",
+          "level": "L1"
+        }
+      ],
+      "category": "Tampering",
+      "component": "response parser",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-05",
+      "plan_asvs": "V2.2.1 L1; V2.2.2 L1; V4.1.1 L1",
+      "rationale": "Type/encoding/strict JSON rejection.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-04"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V1.3.6",
+          "level": "L2"
+        },
+        {
+          "id": "V12.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V12.2.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Spoofing",
+      "component": "optional/IR destinations",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "provider_transport",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-06",
+      "plan_asvs": "V12.2.1 L1; V12.2.2 L1; V1.3.6 L2 project control",
+      "rationale": "Exact registry, no redirects, unconfigured default.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-01"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V16.5.2",
+          "level": "L2"
+        }
+      ],
+      "category": "Denial of Service",
+      "component": "provider pacing",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "provider_transport",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-06",
+      "plan_asvs": "No direct L1; V16.5.2 L2 project control",
+      "rationale": "Independent limiters and cycle cap.",
+      "residual_severity": "MEDIUM",
+      "threat_id": "T-02-05"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V2.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Spoofing",
+      "component": "source health identity",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "reaction_integrity",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-06",
+      "plan_asvs": "V2.2.1 L1; V2.2.2 L1",
+      "rationale": "Exact six IDs and isolation.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-06"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V2.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Tampering",
+      "component": "precedence/dedup",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "reaction_integrity",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-06",
+      "plan_asvs": "V2.2.1 L1; V2.2.2 L1",
+      "rationale": "Tier priority, lineage, visible conflicts.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-10"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V2.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Tampering",
+      "component": "consensus",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "reaction_integrity",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-06",
+      "plan_asvs": "V2.2.1 L1; V2.2.2 L1",
+      "rationale": "Strict chronology and comparable basis.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-11"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V2.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Spoofing",
+      "component": "source readiness",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "reaction_integrity",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-07",
+      "plan_asvs": "V2.2.1 L1; V2.2.2 L1",
+      "rationale": "Exact six rows and isolation tests.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-06"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V2.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Tampering",
+      "component": "advisory snapshot",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "api_supporting_only",
+        "authority_audit",
+        "authority_audit_tests",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-07",
+      "plan_asvs": "V2.2.1 L1; V2.2.2 L1",
+      "rationale": "Normalized envelopes and server allowlists.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-08"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V2.3.1",
+          "level": "L1"
+        },
+        {
+          "id": "V8.3.1",
+          "level": "L1"
+        }
+      ],
+      "category": "Elevation of Privilege",
+      "component": "runtime wiring",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "api_supporting_only",
+        "authority_audit",
+        "authority_audit_tests",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-07",
+      "plan_asvs": "V8.3.1 L1; V2.3.1 L1",
+      "rationale": "Optional read callbacks only; P2-20 equality.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-09"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V15.3.1",
+          "level": "L1"
+        },
+        {
+          "id": "V4.1.1",
+          "level": "L1"
+        }
+      ],
+      "category": "Information Disclosure",
+      "component": "API projection",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "api_supporting_only",
+        "evidence_integrity",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-07",
+      "plan_asvs": "V4.1.1 L1; V15.3.1 L1",
+      "rationale": "Field caps/allowlists, sentinels, loopback.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-12"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V11.4.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Tampering",
+      "component": "checkpoint fields",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "evidence_integrity",
+        "security_gate_contract",
+        "workspace_authority"
+      ],
+      "owner_plan": "02-08",
+      "plan_asvs": "V2.2.1 L1; V2.2.2 L1; V11.4.1 L1",
+      "rationale": "Exact schema/IDs/canonical hash.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-08"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V14.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V15.3.1",
+          "level": "L1"
+        }
+      ],
+      "category": "Information Disclosure",
+      "component": "checkpoint/stdout",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "api_supporting_only",
+        "evidence_integrity",
+        "security_gate_contract",
+        "workspace_authority"
+      ],
+      "owner_plan": "02-08",
+      "plan_asvs": "V14.2.1 L1; V15.3.1 L1",
+      "rationale": "Recursive scan and fixed safe output.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-13"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V11.4.1",
+          "level": "L1"
+        },
+        {
+          "id": "V5.3.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Tampering",
+      "component": "path/collision",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "evidence_integrity",
+        "security_gate_contract",
+        "workspace_authority"
+      ],
+      "owner_plan": "02-08",
+      "plan_asvs": "V5.3.2 L1; V11.4.1 L1",
+      "rationale": "G containment, symlink/traversal rejection, exclusive create.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-13"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V1.3.6",
+          "level": "L2"
+        },
+        {
+          "id": "V12.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V13.2.4",
+          "level": "L2"
+        },
+        {
+          "id": "V14.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V15.3.2",
+          "level": "L2"
+        },
+        {
+          "id": "V16.5.2",
+          "level": "L2"
+        },
+        {
+          "id": "V2.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V4.1.1",
+          "level": "L1"
+        }
+      ],
+      "category": "Spoofing/Tampering/DoS/Disclosure",
+      "component": "transports",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "api_supporting_only",
+        "evidence_integrity",
+        "provider_transport",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-09",
+      "plan_asvs": "V2.2.1 L1; V4.1.1 L1; V12.2.1 L1; V14.2.1 L1; relevant L2 project controls",
+      "rationale": "Hostile transport suite before bounded probe.",
+      "residual_severity": "MEDIUM",
+      "threat_id": "T-02-01..05"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V15.3.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V8.3.1",
+          "level": "L1"
+        }
+      ],
+      "category": "Disclosure/Tampering/Elevation",
+      "component": "advisory",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "api_supporting_only",
+        "authority_audit",
+        "authority_audit_tests",
+        "evidence_integrity",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-09",
+      "plan_asvs": "V2.2.1 L1; V8.3.1 L1; V15.3.1 L1",
+      "rationale": "Candidate guardrails, pending-review zero-call, P2-20.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-07..09"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V2.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Tampering",
+      "component": "source/consensus",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "reaction_integrity",
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-09",
+      "plan_asvs": "V2.2.1 L1; V2.2.2 L1",
+      "rationale": "Precedence/conflict/point-in-time tests.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-10..11"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V11.4.1",
+          "level": "L1"
+        },
+        {
+          "id": "V15.3.1",
+          "level": "L1"
+        },
+        {
+          "id": "V4.1.1",
+          "level": "L1"
+        },
+        {
+          "id": "V5.3.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Disclosure/Tampering",
+      "component": "API/checkpoint",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "api_supporting_only",
+        "evidence_integrity",
+        "security_gate_contract",
+        "workspace_authority"
+      ],
+      "owner_plan": "02-09",
+      "plan_asvs": "V4.1.1 L1; V5.3.2 L1; V11.4.1 L1; V15.3.1 L1",
+      "rationale": "Exact projections, before/after, canonical exclusive G file, full scan.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-12..13"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V11.4.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.3.1",
+          "level": "L1"
+        },
+        {
+          "id": "V5.3.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Tampering / Elevation of Privilege",
+      "component": "Phase 2 plan and allowlist authority",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "api_supporting_only",
+        "authority_audit",
+        "authority_audit_tests",
+        "evidence_integrity",
+        "security_gate_contract",
+        "workspace_authority"
+      ],
+      "owner_plan": "02-10",
+      "plan_asvs": "V2.3.1 L1; V5.3.2 L1; V11.4.1 L1",
+      "rationale": "Pinned `git cat-file blob`, exact plan IDs/hashes/provenance, fixed 7237246 baseline, and co-edit self-authorization tests.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-14"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V2.1.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Tampering",
+      "component": "ASVS/security evidence",
+      "disposition": "mitigate",
+      "initial_severity": "HIGH",
+      "mitigation_command_ids": [
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-10",
+      "plan_asvs": "V2.1.1 L1; V2.2.1 L1; V2.2.2 L1",
+      "rationale": "Exact tagged control inventory, plan-threat completeness, structural validation, and nonzero unresolved HIGH/Critical gate.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-15"
+    },
+    {
+      "asvs_controls": [
+        {
+          "id": "V2.2.1",
+          "level": "L1"
+        },
+        {
+          "id": "V2.2.2",
+          "level": "L1"
+        }
+      ],
+      "category": "Repudiation",
+      "component": "expected-RED classification",
+      "disposition": "mitigate",
+      "initial_severity": "MEDIUM",
+      "mitigation_command_ids": [
+        "security_gate_contract"
+      ],
+      "owner_plan": "02-10",
+      "plan_asvs": "V2.2.1 L1; V2.2.2 L1",
+      "rationale": "Executed named assertion markers and rejection of import/collection/fixture/network/skip/xfail failures.",
+      "residual_severity": "LOW",
+      "threat_id": "T-02-16"
+    }
+  ]
+}

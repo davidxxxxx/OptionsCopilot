@@ -1,0 +1,938 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Options Copilot 人工审核期权决策台">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/styles.css?v=20260814.2">
+  <title>Options Copilot · 10K Campaign</title>
+</head>
+<body>
+  <div id="app-shell" class="app-shell">
+    <header class="topbar">
+      <div class="brand-lockup">
+        <span class="brand-mark" aria-hidden="true">OC</span>
+        <div>
+          <p class="eyebrow">QUANTUMTRADING / HUMAN-GATED AGENT</p>
+          <h1>Options Copilot</h1>
+        </div>
+      </div>
+      <nav class="main-nav" aria-label="主导航">
+        <button class="nav-tab is-active" type="button" data-page="overview"
+                aria-current="page" title="查看总览">总览</button>
+        <button class="nav-tab" type="button" data-page="news"
+                title="查看新闻与事件日历">新闻</button>
+      </nav>
+      <div class="topbar-actions">
+        <div id="page-status" class="status-pill status-pending" role="status">
+          <span class="status-dot" aria-hidden="true"></span>
+          正在同步
+        </div>
+        <div class="timestamp-block">
+          <span>数据刷新</span>
+          <time id="last-refresh">--</time>
+        </div>
+        <button id="refresh-data" class="button button-secondary" type="button"
+                title="刷新账户、候选和学习快照" aria-label="刷新全部数据">
+          刷新数据
+        </button>
+      </div>
+    </header>
+
+    <main id="overview-page" class="dashboard" data-page-panel="overview">
+      <section id="readiness-region" class="campaign-card panel" aria-labelledby="campaign-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">READINESS / PRIMARY OBJECTIVE</p>
+            <h2 id="campaign-title">Readiness · 10K Campaign</h2>
+          </div>
+          <span id="readiness-state" class="status-chip status-unknown">DEGRADED · NO_TRADE</span>
+        </div>
+        <div class="overview-priority-grid" aria-label="当前最重要状态" aria-live="polite">
+          <article data-state="blocked">
+            <span>当前 Review 建议</span>
+            <strong id="overview-action-state">0 / 10</strong>
+            <p id="overview-action-summary">等待最新不可变 Ranking。</p>
+          </article>
+          <article data-state="supporting">
+            <span>研究候选</span>
+            <strong id="overview-research-state">0 / 10</strong>
+            <p id="overview-research-summary">等待真实合约结构。</p>
+          </article>
+          <article data-state="degraded">
+            <span>新闻与模型</span>
+            <strong id="overview-news-state">等待数据</strong>
+            <p id="overview-news-summary">生产分类与 DeepSeek shadow 分开统计。</p>
+          </article>
+          <article data-state="pending">
+            <span>下一建议窗口</span>
+            <strong id="overview-next-state">下个交易日</strong>
+            <p id="overview-next-summary">08:30 ET 研究 · 09:35 ET 开盘重报价。</p>
+          </article>
+        </div>
+        <div class="campaign-value-row">
+          <div>
+            <span class="metric-label">Strategy NAV · 唯一风险基数</span>
+            <strong id="nlv-current" class="hero-value">--</strong>
+          </div>
+          <div class="target-value">
+            <span class="metric-label">账户 NLV · observable/reconciliation only</span>
+            <strong id="account-nlv-observed">--</strong>
+            <span class="metric-label target-gap">最终目标</span>
+            <strong id="nlv-target">$10,000.00</strong>
+          </div>
+        </div>
+        <div id="campaign-progress" class="progress-track" role="progressbar"
+             aria-label="10K Campaign 完成进度" aria-valuemin="0" aria-valuemax="100"
+             aria-valuenow="0">
+          <span id="campaign-progress-bar" class="progress-fill"></span>
+        </div>
+        <div class="progress-meta">
+          <span id="campaign-percent">0.0% 已完成</span>
+          <span id="campaign-remaining">距目标 --</span>
+        </div>
+        <details class="technical-details overview-technical-details">
+          <summary>运行、历史结果与哈希证据</summary>
+          <div class="readiness-truth-grid" aria-live="polite">
+            <p id="nav-reconciliation-evidence" class="readiness-reasons">
+              Strategy NAV 对账 · 等待同一时点的账户 NLV 与差额证据。
+            </p>
+            <p id="readiness-reasons" class="readiness-reasons">
+              当前运行 · 等待 readiness 与 IBKR 只读控制快照。
+            </p>
+            <p id="historical-ranking-state" class="readiness-reasons">
+              历史不可变结果 · 等待最近 scan/ranking 证据；不会作为当前 readiness 展示。
+            </p>
+            <p id="scanner-source-evidence" class="readiness-reasons">
+              Scanner 来源 · 尚未记录逐来源完成、失败与行数证据。
+            </p>
+            <p id="upcoming-exact-slots" class="readiness-reasons">
+              下一精确时槽 · 等待只读 scheduler 证据。
+            </p>
+          </div>
+          <dl class="authority-strip">
+            <div><dt>Scan ID</dt><dd id="scan-run-id">--</dd></div>
+            <div><dt>扫描耗时</dt><dd id="scan-duration">--</dd></div>
+            <div><dt>Ranking ID</dt><dd id="ranking-snapshot-id">--</dd></div>
+            <div><dt>Policy</dt><dd id="policy-identity">--</dd></div>
+            <div><dt>Cost</dt><dd id="cost-identity">--</dd></div>
+          </dl>
+        </details>
+      </section>
+
+      <section id="scan-campaign-region" class="panel scan-campaign-panel overview-secondary-card" aria-labelledby="scan-campaign-title" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">LIVE READ-ONLY CAMPAIGN</p>
+            <h2 id="scan-campaign-title">即时扫描累计证据</h2>
+          </div>
+          <span id="scan-campaign-state" class="status-chip status-unknown">NOT_RUN</span>
+        </div>
+        <p id="scan-campaign-summary" class="readiness-reasons">
+          尚未运行本进程的即时只读扫描；这里不会用旧 Top-10 填充。
+        </p>
+        <p class="scan-campaign-proof">campaign <span id="scan-campaign-id">--</span></p>
+        <div id="scan-campaign-attempts" class="scan-campaign-attempts" aria-live="polite">
+          <p class="empty-state">没有本次即时扫描证据。</p>
+        </div>
+      </section>
+
+      <section id="broker-region" class="broker-card panel overview-secondary-card" aria-labelledby="broker-title" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">BROKER AUTHORITY</p>
+            <h2 id="broker-title">IBKR 审核模式</h2>
+          </div>
+          <span id="ibkr-status" class="status-chip status-unknown">未知</span>
+        </div>
+        <dl class="compact-stats">
+          <div>
+            <dt>账户</dt>
+            <dd id="ibkr-account">••••</dd>
+          </div>
+          <div>
+            <dt>同步状态</dt>
+            <dd id="ibkr-reconciled">--</dd>
+          </div>
+          <div>
+            <dt>报价权限</dt>
+            <dd id="ibkr-market-data">--</dd>
+          </div>
+          <div>
+            <dt>审核模式</dt>
+            <dd id="ibkr-review-mode" class="safe-value">仅供审核 · 不可创建指令</dd>
+          </div>
+        </dl>
+        <p class="safety-note">
+          Copilot 无直接下单权限。最终提交必须在 IBKR 中由你完成。
+        </p>
+        <div class="provider-configuration" aria-label="本地 API 配置状态">
+          <p class="metric-label">本地 API 配置 · 只显示状态，不显示密钥</p>
+          <div class="news-health">
+            <span id="provider-config-jin10" class="status-chip status-unknown">金十 · --</span>
+            <span id="provider-config-finnhub" class="status-chip status-unknown">Finnhub · --</span>
+            <span id="provider-config-alpha-vantage" class="status-chip status-unknown">Alpha Vantage · --</span>
+            <span id="provider-config-deepseek" class="status-chip status-unknown">DeepSeek · --</span>
+          </div>
+          <p id="provider-config-note" class="safety-note">读取 api_keys.local.json；密钥值永不通过 API 或 GUI 返回。</p>
+        </div>
+      </section>
+
+      <section id="position-management-region" class="positions-card panel overview-secondary-card" aria-labelledby="positions-title" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">POSITION MANAGEMENT · SEPARATE AUTHORITY</p>
+            <h2 id="positions-title">持仓管理</h2>
+          </div>
+          <span id="position-count" class="count-chip">0</span>
+        </div>
+        <p id="management-status" class="position-context">存在任一期权组合时，只允许管理与退出，不允许创建第二个组合。</p>
+        <div id="legacy-position-list" class="position-list" aria-live="polite">
+          <p class="empty-state">等待 IBKR 仓位快照…</p>
+        </div>
+        <div id="position-plan-list" class="position-plan-list" aria-live="polite">
+          <p class="empty-state">等待从真实 IBKR 持仓派生只读管理计划…</p>
+        </div>
+        <div id="management-preview-list" class="management-preview-list" aria-live="polite">
+          <p class="empty-state">等待由原子 IBKR 快照生成的 CLOSE_ALL / REDUCE_RISK 证明…</p>
+        </div>
+        <div class="management-action-bar">
+          <button id="management-review-action" class="button button-primary" type="button"
+                  title="仅在未来启用安全创建通道且人工审批完整时创建 IBKR 审核指令；当前永久禁用"
+                  aria-label="Create IBKR review instruction（当前不可用）" disabled>
+            Create IBKR review instruction
+          </button>
+          <p id="management-action-reason" class="management-action-reason">
+            CREATOR_TRANSPORT_UNAVAILABLE · 仅展示审核预览，不创建或提交订单。
+          </p>
+        </div>
+      </section>
+
+      <section id="positioning-region" class="positioning-card panel overview-secondary-card" aria-labelledby="positioning-title" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">OPTION POSITIONING · DISPLAY ONLY</p>
+            <h2 id="positioning-title">Max Pain / 期权墙 / PCR / GEX</h2>
+          </div>
+          <span id="positioning-status" class="status-chip status-unknown">SUPPORTING_ONLY</span>
+        </div>
+        <p id="positioning-reasons" class="position-context">
+          等待 IBKR 只读期权链样本；这些指标不能决定 eligibility、审批或指令创建。
+        </p>
+        <div id="positioning-list" class="positioning-list" aria-live="polite">
+          <p class="empty-state">尚无具备覆盖范围与时间戳的定位指标。</p>
+        </div>
+      </section>
+
+      <section id="top-three-region" class="opportunity-card panel" aria-labelledby="opportunity-title">
+        <div class="section-heading opportunity-heading">
+          <div>
+            <p class="eyebrow">TOP 10 · IMMUTABLE RANKING</p>
+            <h2 id="opportunity-title">六道 Gate 期权建议</h2>
+          </div>
+          <div class="heading-meta">
+            <span id="candidate-count" class="count-chip">0 / 10</span>
+            <span class="risk-cap">首日风险上限 10%</span>
+          </div>
+        </div>
+
+        <div id="no-trade-banner" class="no-trade-banner" role="status" hidden>
+          <div class="no-trade-code">NO_TRADE</div>
+          <div>
+            <strong id="no-trade-title">当前没有满足成本后正期望与风控门槛的机会</strong>
+            <p id="no-trade-reason">等待候选扫描结果。</p>
+          </div>
+        </div>
+
+        <div id="candidate-list" class="candidate-list" aria-live="polite"></div>
+      </section>
+
+      <section id="joint-research-region" class="overview-research-fallback panel"
+               aria-labelledby="joint-research-title" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">JOINT RANKING · RESEARCH_ONLY</p>
+            <h2 id="joint-research-title">联合排名研究候选</h2>
+          </div>
+          <div class="heading-meta">
+            <span id="joint-research-count" class="count-chip">0</span>
+            <span class="status-chip status-no-trade">不可审批</span>
+          </div>
+        </div>
+        <p id="joint-research-summary" class="overview-research-warning">
+          等待与股票 thesis、真实期权合约及不可变联合排名绑定的 research-only 行。
+        </p>
+        <div id="joint-research-list" class="research-top10-list" aria-live="polite"></div>
+      </section>
+
+      <section id="equity-pool-region" class="panel equity-pool-panel" aria-labelledby="equity-pool-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">DURABLE EQUITY POOL · SECTOR BALANCED</p>
+            <h2 id="equity-pool-title">股票研究池</h2>
+          </div>
+          <div class="heading-meta">
+            <span id="equity-pool-status" class="status-chip status-unknown">RESEARCH_ONLY · UNAVAILABLE</span>
+            <span id="equity-pool-counts" class="count-chip">发现 -- · 入池 0</span>
+          </div>
+        </div>
+        <p id="equity-pool-summary" class="readiness-reasons">等待可复现的行业平衡股票池。</p>
+        <p id="equity-pool-exclusions" class="readiness-reasons">当前没有排除记录。</p>
+        <time id="equity-pool-asof">--</time>
+        <div id="equity-pool-list" class="equity-pool-list" aria-live="polite"></div>
+      </section>
+
+      <section id="daily-funnel-region" class="panel daily-funnel-panel" aria-labelledby="daily-funnel-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">DAILY DURABLE FUNNEL · ET</p>
+            <h2 id="daily-funnel-title">今日运行与下一交易日准备</h2>
+          </div>
+          <span id="daily-funnel-status" class="status-chip status-unknown">UNAVAILABLE</span>
+        </div>
+        <p id="next-session-preparation" class="readiness-reasons">下一交易日准备尚未形成持久化证据。</p>
+        <div id="daily-funnel-runs" class="daily-funnel-runs" aria-live="polite"></div>
+      </section>
+
+      <section id="overview-research-fallback" class="overview-research-fallback panel"
+               aria-labelledby="overview-research-title" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">RESEARCH POOL · SEPARATE FROM ACTIONABLE RANKING</p>
+            <h2 id="overview-research-title">研究候选 · 当前不可下单</h2>
+          </div>
+          <div class="heading-meta">
+            <span id="overview-research-count" class="count-chip">0 / 10</span>
+            <span class="status-chip status-no-trade">SUPPORTING_ONLY</span>
+          </div>
+        </div>
+        <p class="overview-research-warning">
+          QUOTE REQUIRED · 以下仅为真实 IBKR 合约身份的 defined-risk 结构；未通过实时逐腿报价、Greeks、流动性、成本后 EV、NAV 与六道 Gate，不能审批或下单。
+        </p>
+        <section class="after-hours-indicative" aria-labelledby="after-hours-indicative-title">
+          <div class="after-hours-indicative-heading">
+            <div>
+              <p class="eyebrow">LAST AVAILABLE MARKS · NO_TRADE</p>
+              <h3 id="after-hours-indicative-title">收盘后指示性成本核算</h3>
+            </div>
+            <button id="read-after-hours-marks" class="button button-secondary" type="button"
+                    title="从 IBKR 只读获取最后可得期权 marks 并计算指示性成本">
+              读取最后可得期权数据
+            </button>
+          </div>
+          <p id="after-hours-indicative-summary" class="research-top10-stage-summary" aria-live="polite">
+            非正常交易时段依次读取 frozen / delayed-frozen / last、上一交易日最后成交与 previous close；只做指示性成本核算，不代表实时可成交价，固定 NO_TRADE。若 IBKR 没有返回期权腿价格，Debit 与最大亏损会保持不可用。
+          </p>
+          <div id="after-hours-indicative-list" class="research-top10-list" aria-live="polite"></div>
+        </section>
+        <div id="overview-research-list" class="research-top10-list" aria-live="polite"></div>
+      </section>
+
+      <section class="overview-detail-control" aria-label="次要系统信息">
+        <button id="toggle-overview-details" class="button button-secondary" type="button" aria-expanded="false"
+                title="展开或收起系统、持仓与模型细节">
+          查看系统、持仓与模型细节
+        </button>
+        <p>默认收起诊断、Provider、Positioning、学习治理与审核协议；出现真实持仓时持仓卡会自动显示。</p>
+      </section>
+
+      <section id="evidence-exit-region" class="learning-card panel overview-secondary-card" aria-labelledby="evidence-exit-title" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">EVIDENCE &amp; EXIT PLAN</p>
+            <h2 id="evidence-exit-title">证据、反证与退出计划</h2>
+          </div>
+          <span class="status-chip status-unknown">SUPPORTING_ONLY</span>
+        </div>
+        <div id="selected-evidence" class="evidence-panel">
+          <p class="empty-state">选择 Top 10 候选查看 primary/supporting evidence。</p>
+        </div>
+        <div id="selected-exit-plan" class="exit-plan-panel">
+          <p class="empty-state">退出计划必须在创建 challenge 前完整可见。</p>
+        </div>
+      </section>
+
+      <section id="learning-region" class="learning-card panel overview-secondary-card" aria-labelledby="learning-title" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">CONTROLLED LEARNING</p>
+            <h2 id="learning-title">Champion / Challenger</h2>
+          </div>
+          <span id="learning-gate" class="status-chip status-unknown" role="status">
+            SHADOW_ONLY · COLLECTING
+          </span>
+        </div>
+        <div class="model-grid">
+          <article id="learning-champion" class="model-card model-champion">
+            <div class="model-label">CHAMPION · 生产基准</div>
+            <strong data-field="model-name">--</strong>
+            <dl>
+              <div><dt>成本后 EV</dt><dd data-field="model-ev">--</dd></div>
+              <div><dt>校准误差</dt><dd data-field="model-calibration">--</dd></div>
+              <div><dt>独立样本</dt><dd data-field="model-samples">--</dd></div>
+            </dl>
+          </article>
+          <article id="learning-challenger" class="model-card">
+            <div class="model-label">CHALLENGER · 影子模型</div>
+            <strong data-field="model-name">--</strong>
+            <dl>
+              <div><dt>成本后 EV</dt><dd data-field="model-ev">--</dd></div>
+              <div><dt>前向状态</dt><dd data-field="model-calibration">--</dd></div>
+              <div><dt>独立样本</dt><dd data-field="model-samples">--</dd></div>
+            </dl>
+          </article>
+        </div>
+        <div class="learning-evidence-grid" aria-label="DeepSeek 与五时域结果只读证据" aria-live="polite">
+          <article class="model-card deepseek-advisory-card">
+            <div class="model-label">DEEPSEEK NEWS SHADOW · SUPPORTING_ONLY</div>
+            <strong id="deepseek-advisory-status">UNAVAILABLE · 0/0 · SUPPORTING_ONLY</strong>
+            <p id="deepseek-advisory-summary" class="learning-evidence-summary">
+              生产确定性分类与 DeepSeek shadow 覆盖会分别显示；两者均不具备交易、审批、指令或订单权限。
+            </p>
+            <ul id="deepseek-advisory-details" class="reason-list">
+              <li>NEWS SHADOW · UNAVAILABLE</li>
+            </ul>
+          </article>
+          <article class="model-card outcome-horizon-card">
+            <div class="model-label">IMMUTABLE OUTCOMES · SUPPORTING_ONLY</div>
+            <strong id="outcome-processing-status">UNAVAILABLE · SUPPORTING_ONLY</strong>
+            <p id="outcome-capture-summary" class="learning-evidence-summary">
+              方向层与期权经济层会分开显示；未绑定真实组合时不会伪造 P&amp;L。
+            </p>
+            <dl class="outcome-horizon-grid">
+              <div><dt>30M</dt><dd id="outcome-horizon-30m">NOT_OBSERVED · SUPPORTING_ONLY</dd></div>
+              <div><dt>Session close</dt><dd id="outcome-horizon-session-close">NOT_OBSERVED · SUPPORTING_ONLY</dd></div>
+              <div><dt>1D</dt><dd id="outcome-horizon-1d">NOT_OBSERVED · SUPPORTING_ONLY</dd></div>
+              <div><dt>3D</dt><dd id="outcome-horizon-3d">NOT_OBSERVED · SUPPORTING_ONLY</dd></div>
+              <div><dt>5D</dt><dd id="outcome-horizon-5d">NOT_OBSERVED · SUPPORTING_ONLY</dd></div>
+            </dl>
+          </article>
+        </div>
+        <div class="learning-governance" aria-label="影子学习治理状态" aria-live="polite">
+          <div class="learning-stat">
+            <span>影子阶段</span>
+            <strong id="learning-stage">COLLECTING</strong>
+          </div>
+          <div class="learning-stat">
+            <span>独立样本</span>
+            <strong id="learning-samples">-- / 30</strong>
+          </div>
+          <div class="learning-stat">
+            <span>不可变记录</span>
+            <strong id="learning-record-count">--</strong>
+          </div>
+          <div class="learning-stat">
+            <span>账本完整性</span>
+            <strong id="learning-integrity" data-state="unknown">未提供</strong>
+          </div>
+        </div>
+        <div class="model-grid" aria-label="P9 生产治理只读状态" aria-live="polite">
+          <article id="learning-policy-card" class="model-card">
+            <div class="model-label">CURRENT POLICY · 只读策略头</div>
+            <strong id="learning-policy-status">UNAVAILABLE · LOCKED</strong>
+            <dl>
+              <div><dt>策略版本</dt><dd id="learning-policy-version">UNAVAILABLE</dd></div>
+              <div><dt>策略哈希</dt><dd id="learning-policy-hash">UNAVAILABLE</dd></div>
+              <div><dt>Policy Marker</dt><dd id="learning-policy-marker">UNAVAILABLE</dd></div>
+              <div><dt>Authority Head</dt><dd id="learning-authority-head">UNAVAILABLE</dd></div>
+              <div><dt>初始策略</dt><dd id="learning-initial-policy-hash">UNAVAILABLE</dd></div>
+            </dl>
+          </article>
+          <article id="learning-evaluation-card" class="model-card">
+            <div class="model-label">EVALUATION · 成本后评估</div>
+            <strong id="learning-evaluation-status">UNAVAILABLE · LOCKED</strong>
+            <dl>
+              <div><dt>阶段 / 样本</dt><dd id="learning-evaluation-stage">UNAVAILABLE</dd></div>
+              <div><dt>评估报告</dt><dd id="learning-evaluation-report">UNAVAILABLE</dd></div>
+              <div><dt>数据集</dt><dd id="learning-evaluation-dataset">UNAVAILABLE</dd></div>
+              <div><dt>独立性规范</dt><dd id="learning-evaluation-independence">UNAVAILABLE</dd></div>
+            </dl>
+          </article>
+          <article id="learning-transition-card" class="model-card">
+            <div class="model-label">POLICY CHANGE · 仅观察</div>
+            <strong id="learning-transition-status">LOCKED</strong>
+            <dl>
+              <div><dt>Promotion</dt><dd id="learning-promotion-status">UNAVAILABLE · LOCKED</dd></div>
+              <div><dt>Promotion Authority</dt><dd id="learning-promotion-hash">UNAVAILABLE</dd></div>
+              <div><dt>Rollback</dt><dd id="learning-rollback-status">UNAVAILABLE · LOCKED</dd></div>
+              <div><dt>Rollback Authority</dt><dd id="learning-rollback-hash">UNAVAILABLE</dd></div>
+              <div><dt>Rollback Target</dt><dd id="learning-rollback-target">UNAVAILABLE</dd></div>
+            </dl>
+          </article>
+          <article id="learning-a-grade-card" class="model-card">
+            <div class="model-label">A-GRADE · Proposal-bound</div>
+            <strong id="learning-a-grade-status">UNAVAILABLE · LOCKED</strong>
+            <dl>
+              <div><dt>Proposal</dt><dd id="learning-a-grade-proposal">UNAVAILABLE</dd></div>
+              <div><dt>Marker</dt><dd id="learning-a-grade-marker">UNAVAILABLE</dd></div>
+              <div><dt>最大风险</dt><dd id="learning-a-grade-risk">15% LOCKED</dd></div>
+            </dl>
+          </article>
+        </div>
+        <div class="learning-governance" aria-label="生产权限与风险边界" aria-live="polite">
+          <div class="learning-stat">
+            <span>生产治理</span>
+            <strong id="learning-production-governance">LOCKED · READ_ONLY</strong>
+          </div>
+          <div class="learning-stat">
+            <span>人工签名器</span>
+            <strong id="learning-human-signer">UNAVAILABLE</strong>
+          </div>
+          <div class="learning-stat">
+            <span>风险边界</span>
+            <strong id="learning-risk-contract">UNAVAILABLE · LOCKED</strong>
+          </div>
+          <div class="learning-stat">
+            <span>Risk Authority</span>
+            <strong id="learning-risk-authority">UNAVAILABLE</strong>
+          </div>
+          <div class="learning-stat">
+            <span>Creator Transport</span>
+            <strong id="learning-creator-transport">UNAVAILABLE</strong>
+          </div>
+          <div class="learning-stat">
+            <span>治理原因</span>
+            <strong id="learning-governance-reason">UNAVAILABLE · LOCKED</strong>
+          </div>
+        </div>
+        <p id="learning-summary" class="learning-summary">
+          影子学习只到 Discovery；生产治理保持只读锁定。NORMAL 10%，15% A-grade 未解锁，20% 绝对拒绝。
+        </p>
+      </section>
+
+      <aside id="final-review-region" class="review-card panel overview-secondary-card" aria-labelledby="review-title" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">FINAL AUTHORITY</p>
+            <h2 id="review-title">IBKR 最终审核</h2>
+          </div>
+        </div>
+        <ol class="review-flow">
+          <li><span>1</span>检查逐腿实时报价与最大亏损</li>
+          <li><span>2</span>勾选风险确认并完成二次确认</li>
+          <li><span>3</span>在 IBKR 中审核并最终提交</li>
+        </ol>
+        <div id="approval-status" class="approval-status" role="status">
+          尚未创建审核指令
+        </div>
+        <a id="ibkr-review-link" class="button button-disabled" href="#"
+           aria-disabled="true" tabindex="-1" title="IBKR 审核深链接占位">
+          IBKR 审核入口（等待 READY_FOR_IBKR_REVIEW）
+        </a>
+      </aside>
+    </main>
+
+    <main id="news-page" class="news-page" data-page-panel="news" hidden>
+      <section class="news-toolbar panel" aria-labelledby="news-title">
+        <div class="news-title-row">
+          <p class="eyebrow">READ-ONLY MARKET INTELLIGENCE</p>
+          <h2 id="news-title">新闻与事件日历</h2>
+          <p>先看是否采集、谁在分析、事件后影响是否闭环；技术来源状态在下方按需展开。</p>
+        </div>
+        <div class="news-capability-grid" aria-label="新闻能力摘要" aria-live="polite">
+          <article data-state="degraded">
+            <span>持续采集</span>
+            <strong id="news-live-status">等待数据</strong>
+            <p id="news-live-summary">并非所有来源都保证实时。</p>
+          </article>
+          <article data-state="degraded">
+            <span>金十</span>
+            <strong id="jin10-live-status">等待状态</strong>
+            <p id="jin10-live-summary">密钥状态与可见记录分开核对。</p>
+          </article>
+          <article data-state="supporting">
+            <span>生产分类 / DeepSeek</span>
+            <strong id="news-model-status">0 / 0</strong>
+            <p id="news-model-summary">DeepSeek 仅作 shadow，不替代生产分类。</p>
+          </article>
+          <article data-state="blocked">
+            <span>事件后影响闭环</span>
+            <strong id="news-reaction-status">未验证</strong>
+            <p id="news-reaction-summary">等待 actual、surprise、市场反应与期权重评。</p>
+          </article>
+          <article data-state="blocked">
+            <span>Point-in-time 基本面</span>
+            <strong id="fundamentals-status">UNAVAILABLE · 0 条 · 0/6 类</strong>
+            <p id="fundamentals-summary">EPS、营收、指引、现金流、债务和估值分开核验。</p>
+          </article>
+        </div>
+        <details class="technical-details news-source-details">
+          <summary>数据源、模型覆盖与研究池详细状态</summary>
+          <p id="news-publication-status" class="muted">采集与发布进度不可用 · 不代表交易就绪</p>
+          <div class="news-health" aria-label="Provider health">
+            <span id="news-provider-health" class="status-chip status-unknown">新闻 provider · --</span>
+            <span id="calendar-provider-health" class="status-chip status-unknown">日历 provider · --</span>
+            <span id="sec-source-health" class="status-chip status-stale source-health-chip">SEC · DEGRADED · NOT_OBSERVED · 成功 0 · 失败日期 0</span>
+            <span id="company-ir-source-health" class="status-chip status-stale source-health-chip">Company IR · DEGRADED · NOT_OBSERVED · 成功 0 · 失败日期 0</span>
+            <span id="finnhub-news-source-health" class="status-chip status-stale source-health-chip">Finnhub 新闻 · DEGRADED · NOT_OBSERVED · 成功 0 · 失败日期 0</span>
+            <span id="alpha-vantage-source-health" class="status-chip status-stale source-health-chip">Alpha Vantage · DEGRADED · NOT_OBSERVED · 成功 0 · 失败日期 0</span>
+            <span id="jin10-source-health" class="status-chip status-stale source-health-chip">金十 · DEGRADED · NOT_OBSERVED · 成功 0 · 失败日期 0</span>
+            <span id="nasdaq-source-health" class="status-chip status-stale source-health-chip">Nasdaq · DEGRADED · NOT_OBSERVED · 成功 0 · 失败日期 0</span>
+            <span id="finnhub-calendar-source-health" class="status-chip status-stale source-health-chip">Finnhub 日历 · DEGRADED · NOT_OBSERVED · 成功 0 · 失败日期 0</span>
+            <span id="official-calendar-source-health" class="status-chip status-stale source-health-chip">官方日历 · DEGRADED · NOT_OBSERVED · 成功 0 · 失败日期 0</span>
+            <span id="news-classifier-summary" class="status-chip status-stale source-health-chip">分类器 · DeepSeek shadow 0 · 生产规则 0</span>
+            <span class="news-pool-counts" aria-label="只读研究池状态">
+              <span>新闻盘前研究池 <strong id="news-research-pool-count">0/10</strong></span>
+              <span>新闻开盘观察 <strong id="news-action-pool-count">0/3</strong></span>
+              <span>合约盘前 <strong id="option-pre-market-count">0/10</strong></span>
+              <span>合约开盘 Observation <strong id="option-open-repriced-count">0/10</strong></span>
+              <span>合约合格观察 <strong id="option-action-observation-count">0/3</strong></span>
+            </span>
+            <span class="timestamp-block"><span>读模型发布 / 每 60 秒轮询</span><time id="last-news-refresh">--</time></span>
+          </div>
+        </details>
+      </section>
+
+      <details class="panel fundamentals-panel">
+        <summary>公司基本面与修订历史（SUPPORTING_ONLY）</summary>
+        <p class="news-disclaimer">SEC/XBRL 实际值和有界估值只作研究证据；首次观察时间决定 point-in-time 可见性，修订仅追加不覆盖，缺失指引不会从新闻中推断。</p>
+        <div id="fundamentals-list" class="fundamentals-list" aria-live="polite">
+          <p class="empty-state">等待基本面证据。</p>
+        </div>
+      </details>
+
+      <section id="news-chronology-panel" class="news-chronology-panel panel" aria-labelledby="news-chronology-title">
+        <div class="news-chronology-heading">
+          <div>
+            <p class="eyebrow">CHRONOLOGY BRIEFING · LIVE READ MODEL</p>
+            <h2 id="news-chronology-title">每日重点、本周事件与下周前瞻</h2>
+          </div>
+          <div class="news-chronology-authority" aria-label="新闻简报权限边界">
+            <span class="authority-chip">SUPPORTING_ONLY</span>
+            <span class="authority-chip">实时派生</span>
+            <span class="authority-chip">不替代 08:30 周报</span>
+          </div>
+        </div>
+        <p class="news-chronology-disclaimer">
+          新闻按既有事件影响分从重大到一般排列；日历按来源重要度、市场级事件优先、时间精度和预计发生时间排列。预计发生、实际发布/释放和来源发布时间分开显示，缺失值不推断。
+        </p>
+        <div class="news-chronology-grid">
+          <article aria-labelledby="daily-major-news-title">
+            <div class="chronology-column-heading">
+              <div><p class="eyebrow">BEIJING DAY</p><h3 id="daily-major-news-title">今日重大新闻</h3></div>
+              <span id="daily-major-news-count" class="count-chip">0</span>
+            </div>
+            <div id="daily-major-news-list" class="chronology-list" aria-live="polite">
+              <p class="empty-state">等待今日 point-in-time 新闻。</p>
+            </div>
+          </article>
+          <article aria-labelledby="this-week-major-events-title">
+            <div class="chronology-column-heading">
+              <div><p class="eyebrow">THIS WEEK</p><h3 id="this-week-major-events-title">本周重大事件</h3></div>
+              <span id="this-week-major-events-count" class="count-chip">0</span>
+            </div>
+            <div id="this-week-major-events-list" class="chronology-list" aria-live="polite">
+              <p class="empty-state">等待本周事件日历。</p>
+            </div>
+          </article>
+          <article aria-labelledby="next-week-outlook-title">
+            <div class="chronology-column-heading">
+              <div><p class="eyebrow">NEXT WEEK</p><h3 id="next-week-outlook-title">下周前瞻</h3></div>
+              <span id="next-week-outlook-count" class="count-chip">0</span>
+            </div>
+            <div id="next-week-outlook-list" class="chronology-list" aria-live="polite">
+              <p class="empty-state">等待下一周可验证事件。</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <details class="content-disclosure">
+        <summary>正式周报与两周窗口 <span>08:30 ET exact-only · observation-only</span></summary>
+      <section id="weekly-brief-panel" class="weekly-brief-panel panel" aria-labelledby="weekly-brief-title">
+        <div class="weekly-brief-heading">
+          <div>
+            <p class="eyebrow">WEEKLY RESEARCH · 08:30 ET EXACT-ONLY</p>
+            <h2 id="weekly-brief-title">本周事件、上周回顾与 provisional watchlist</h2>
+          </div>
+          <div class="weekly-brief-authority" aria-label="周报权限边界">
+            <span id="weekly-brief-status" class="status-chip status-stale">NOT_RUN</span>
+            <span class="authority-chip">OBSERVATION_ONLY</span>
+            <span class="authority-chip">不可补跑</span>
+          </div>
+        </div>
+        <p class="weekly-brief-disclaimer">
+          每周首个正式美股 session 仅在 08:30 ET 精确生成。新闻、DeepSeek 和 Gate 预览均为 SUPPORTING_ONLY；缺少 option chain、实时报价、Strategy NAV 或 positioning 时，不生成可执行组合。
+        </p>
+        <div class="weekly-brief-meta">
+          <span id="weekly-brief-count" class="count-chip">0/10</span>
+          <time id="weekly-brief-cutoff">--</time>
+          <span id="weekly-brief-hash">hash --</span>
+        </div>
+        <p id="weekly-brief-reasons" class="weekly-brief-reasons" aria-live="polite">
+          尚无本周 append-only 周报；保持 NOT_RUN。
+        </p>
+        <div class="weekly-brief-windows">
+          <article>
+            <h3>上周回顾</h3>
+            <div id="weekly-prior-items" class="weekly-brief-items"><p class="empty-state">暂无 point-in-time 证据。</p></div>
+          </article>
+          <article>
+            <h3>未来 1–7 天</h3>
+            <div id="weekly-upcoming-items" class="weekly-brief-items"><p class="empty-state">暂无事件日历证据。</p></div>
+          </article>
+          <article>
+            <h3>未来 8–14 天</h3>
+            <div id="weekly-next-items" class="weekly-brief-items"><p class="empty-state">暂无下一周预览。</p></div>
+          </article>
+        </div>
+        <div class="weekly-watch-heading">
+          <h3>最多 10 个 provisional 观察项</h3>
+          <span>Gate 1/4/5/6 必须 UNAVAILABLE；不得进入审批或指令</span>
+        </div>
+        <div id="weekly-watch-list" class="weekly-watch-list" aria-live="polite">
+          <p class="empty-state">等待本周 observation-only 观察项。</p>
+        </div>
+      </section>
+      </details>
+
+      <details class="content-disclosure" open>
+        <summary>研究期权结构池 <span>股票 thesis → 多结构 → 逐腿证据</span></summary>
+        <section id="option-structure-pool-panel" class="option-structure-pool-panel panel" aria-labelledby="option-structure-pool-title">
+          <div class="research-top10-heading">
+            <div>
+              <p class="eyebrow">DURABLE OPTION POOL · SUPPORTING_ONLY</p>
+              <h2 id="option-structure-pool-title">研究期权结构池</h2>
+            </div>
+            <div class="research-top10-authority">
+              <span id="option-structure-pool-status" class="status-chip status-no-trade">NO_TRADE · UNAVAILABLE</span>
+              <span class="authority-chip">不可审批</span>
+            </div>
+          </div>
+          <p class="research-top10-disclaimer">
+            股票研究池的方向 thesis 会绑定到多种 defined-risk 结构；这里只显示真实合约身份、逐腿证据和缺口。结构池不是最终 Top-10，也不会创建指令或订单。
+          </p>
+          <div class="option-structure-pool-meta">
+            <span id="option-structure-pool-counts" class="count-chip">精确证据 0 · 研究 0 · 排除 0</span>
+            <time id="option-structure-pool-asof">--</time>
+          </div>
+          <p id="option-structure-pool-summary" class="research-top10-stage-summary" aria-live="polite">
+            等待股票研究池与真实期权证据。
+          </p>
+          <div id="option-structure-pool-list" class="option-structure-pool-list" aria-live="polite">
+            <p class="empty-state">当前没有真实合约候选；保持 NO_TRADE。</p>
+          </div>
+        </section>
+      </details>
+
+      <details class="content-disclosure">
+        <summary>条件式期权研究 Top-10 <span>真实结构 · 当前不可下单</span></summary>
+      <section id="research-top10-panel" class="research-top10-panel panel" aria-labelledby="research-top10-title">
+        <div class="research-top10-heading">
+          <div>
+            <p class="eyebrow">RESEARCH V2 · SUPPORTING_ONLY</p>
+            <h2 id="research-top10-title">条件式期权研究 Top-10</h2>
+          </div>
+          <div class="research-top10-authority" aria-label="研究权限边界">
+            <span id="research-top10-status" class="status-chip status-no-trade">NO_TRADE</span>
+            <span class="authority-chip">不可审批</span>
+            <span class="authority-chip">不可创建指令</span>
+          </div>
+        </div>
+        <p class="research-top10-disclaimer">
+          盘前结构与 09:35 指示性重报价分开记录；所有价格均为只读研究证据，SUPPORTING_ONLY，不代表可成交报价或交易建议。
+        </p>
+        <div class="research-top10-toolbar">
+          <div class="research-top10-tabs" role="group" aria-label="条件式期权研究阶段">
+            <button type="button" class="calendar-tab is-active" data-research-top10-stage="pre-market" title="查看盘前条件式期权研究 Top-10">盘前条件式预选</button>
+            <button type="button" class="calendar-tab" data-research-top10-stage="open-repriced" title="查看 09:35 独立指示性重报价">09:35 指示性重报价</button>
+          </div>
+          <div class="research-top10-meta">
+            <span id="research-top10-count" class="count-chip">0/10</span>
+            <time id="research-top10-asof">--</time>
+          </div>
+        </div>
+        <p id="research-top10-stage-summary" class="research-top10-stage-summary" aria-live="polite">
+          盘前 Top-10 尚未发布；保持 NO_TRADE。
+        </p>
+        <p id="research-top10-runtime-truth" class="research-top10-stage-summary" aria-live="polite">
+          精确时槽结果尚未记录。
+        </p>
+        <div id="research-top10-list" class="research-top10-list" aria-live="polite">
+          <p class="empty-state">等待独立 research-v2 只读快照；不会从可审批候选回填。</p>
+        </div>
+      </section>
+      </details>
+
+      <details class="content-disclosure">
+        <summary>全部新闻、筛选、证据与事件日历 <span>高级研究工作台</span></summary>
+      <section class="news-layout" aria-label="新闻研究工作台">
+        <aside class="news-sidebar panel">
+          <div class="section-heading">
+            <div><p class="eyebrow">FILTERS</p><h2>实时新闻</h2></div>
+          </div>
+          <div class="news-filter-grid">
+            <label class="filter-label" for="news-filter">证据状态
+              <select id="news-filter" class="news-select" aria-label="按证据状态过滤新闻">
+                <option value="ALL">全部状态</option>
+                <option value="PROVISIONAL">PROVISIONAL</option>
+                <option value="CONFIRMED">CONFIRMED</option>
+                <option value="MARKET_CONFIRMED">MARKET_CONFIRMED</option>
+                <option value="CONFLICTED">CONFLICTED</option>
+                <option value="NO_TRADE">NO_TRADE</option>
+              </select>
+            </label>
+            <label class="filter-label" for="news-category-filter">分类
+              <select id="news-category-filter" class="news-select" aria-label="按分类过滤新闻"><option value="ALL">全部分类</option></select>
+            </label>
+            <label class="filter-label" for="news-source-filter">文章来源 / 发布者
+              <select id="news-source-filter" class="news-select" aria-label="按文章来源或发布者过滤新闻"><option value="ALL">全部文章来源</option></select>
+            </label>
+            <label class="filter-label" for="news-symbol-filter">标的
+              <select id="news-symbol-filter" class="news-select" aria-label="按标的过滤新闻"><option value="ALL">全部标的</option></select>
+            </label>
+          </div>
+          <div id="realtime-news-list" class="realtime-news-list" aria-live="polite"></div>
+        </aside>
+
+        <section class="news-opportunities panel" aria-labelledby="opportunity-news-title">
+          <div class="section-heading">
+            <div><p class="eyebrow">RANKED RESEARCH</p><h2 id="opportunity-news-title">按综合机会分排序</h2></div>
+            <span id="news-count" class="count-chip">0</span>
+          </div>
+          <p class="news-disclaimer">独立盘前 Top 10 ledger 与开盘 observation 仅供研究展示；不会从 Ranking Top 10 回填，本页不创建审批、指令或订单。</p>
+          <div id="news-opportunity-list" class="news-opportunity-list"></div>
+          <section class="option-preselection-section" aria-labelledby="option-preselection-title">
+            <div class="section-heading option-preselection-heading">
+              <div>
+                <p class="eyebrow">CONTRACT-BOUND · SUPPORTING_ONLY</p>
+                <h3 id="option-preselection-title">合约级条件式期权预选</h3>
+              </div>
+              <span class="authority-chip">不可审批</span>
+            </div>
+            <div class="preselection-ledger-strip" aria-label="独立 Top-10 ledger 状态">
+              <span id="option-preselection-ledger-source" class="status-chip status-stale">INDEPENDENT_TOP10_LEDGER</span>
+              <span id="option-preselection-ledger-status" class="status-chip status-unknown">UNAVAILABLE</span>
+              <span id="option-open-observation-status" class="status-chip status-unknown">OPEN · UNAVAILABLE</span>
+            </div>
+            <p id="option-preselection-ledger-reason" class="preselection-ledger-reason">独立盘前 Top‑10 ledger 未就绪；未从 Ranking Top 10 回填。</p>
+            <p id="option-preselection-ledger-lineage" class="news-meta">latest run -- · head --</p>
+            <div class="option-pool-tabs" role="group" aria-label="条件式期权预选阶段">
+              <button type="button" class="calendar-tab is-active" data-option-pool="pre-market" title="查看盘前最多十个条件式预选">盘前 Top 10</button>
+              <button type="button" class="calendar-tab" data-option-pool="open-repriced" title="查看已经写入独立 ledger 的开盘只读 observation；不代表 producer 可用">开盘 Observation（只读）</button>
+            </div>
+            <div id="option-preselection-list" class="option-preselection-list" aria-live="polite"></div>
+          </section>
+        </section>
+
+        <aside class="news-detail panel" aria-labelledby="news-detail-title">
+          <div class="section-heading">
+            <div><p class="eyebrow">DETAIL &amp; EVIDENCE</p><h2 id="news-detail-title">详情与关联期权研究</h2></div>
+          </div>
+          <div id="news-detail-content" class="news-detail-content" aria-live="polite">
+            <p class="empty-state">选择一条新闻以查看证据与关联研究。</p>
+          </div>
+          <section class="option-detail-section" aria-labelledby="option-detail-title">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">READ-ONLY CONTRACT EVIDENCE</p>
+                <h3 id="option-detail-title">逐腿只读报价证据与风险</h3>
+              </div>
+            </div>
+            <div id="option-preselection-detail" class="option-preselection-detail" aria-live="polite">
+              <p class="empty-state">选择一个合约级条件式预选以查看逐腿只读报价证据、Greeks、流动性与退出条件。</p>
+            </div>
+          </section>
+          <section class="calendar-section" aria-labelledby="calendar-title">
+            <div class="section-heading">
+              <h3 id="calendar-title">事件日历</h3>
+              <span id="calendar-decision-status" class="status-chip status-stale">NO_TRADE</span>
+            </div>
+            <div class="calendar-reaction-envelope" aria-live="polite" aria-label="事件反应 provider 状态与覆盖">
+              <span id="calendar-reaction-provider-status" class="status-chip status-stale">事件反应 provider · UNAVAILABLE · NO_TRADE</span>
+              <span id="calendar-reaction-provider-coverage" class="news-meta">覆盖 --/-- · ledger -- · ignored --</span>
+            </div>
+            <p id="calendar-status-reasons" class="news-meta">等待官方来源与日历 provider。</p>
+            <div class="calendar-tabs" role="group" aria-label="事件日历范围">
+              <button type="button" class="calendar-tab is-active" data-calendar-window="this-week" title="查看本周事件">本周</button>
+              <button type="button" class="calendar-tab" data-calendar-window="next-week" title="查看下周事件">下周</button>
+              <button type="button" class="calendar-tab" data-calendar-window="two-weeks" title="查看两周事件">两周</button>
+            </div>
+            <p id="calendar-list-summary" class="calendar-list-summary news-meta" aria-live="polite">展示 0 / 0</p>
+            <div id="calendar-list" class="calendar-list"></div>
+          </section>
+        </aside>
+      </section>
+      </details>
+    </main>
+  </div>
+
+  <template id="candidate-template">
+    <article class="candidate-card">
+      <header class="candidate-header">
+        <div class="rank-badge" data-field="rank">#1</div>
+        <div class="candidate-identity">
+          <div class="candidate-title-row">
+            <h3 data-field="candidate-title">--</h3>
+            <span class="grade-chip" data-field="grade">--</span>
+          </div>
+          <p data-field="candidate-subtitle">--</p>
+        </div>
+        <div class="freshness-block">
+          <span class="freshness-label" data-field="freshness-status">--</span>
+          <time data-field="freshness-time">--</time>
+        </div>
+        <button type="button" class="button button-secondary candidate-select"
+                data-field="select-candidate" title="查看 Rank 1 证据与退出计划">
+          查看证据
+        </button>
+      </header>
+
+      <div class="candidate-metrics">
+        <div><span>最大亏损</span><strong class="negative" data-field="max-loss">--</strong></div>
+        <div><span>最大盈利</span><strong class="positive" data-field="max-profit">--</strong></div>
+        <div><span>成本后 EV</span><strong data-field="expected-value">--</strong></div>
+        <div><span>胜率 / POP</span><strong data-field="probability">--</strong></div>
+      </div>
+
+      <dl class="candidate-authority-grid">
+        <div><dt>Candidate / Proposal</dt><dd data-field="candidate-identities">--</dd></div>
+        <div><dt>SecDef</dt><dd data-field="secdef-status">--</dd></div>
+        <div><dt>Quote age / skew</dt><dd data-field="quote-health">--</dd></div>
+        <div><dt>Risk / Strategy NAV</dt><dd data-field="risk-fraction">--</dd></div>
+        <div><dt>Policy / Cost</dt><dd data-field="authority-identity">--</dd></div>
+      </dl>
+
+      <div class="legs-table-wrap">
+        <table class="legs-table">
+          <thead>
+            <tr>
+              <th>腿</th><th>合约</th><th>Bid</th><th>Ask</th><th>Last</th>
+              <th>IV</th><th>OI</th><th>Volume</th><th>报价时间</th>
+            </tr>
+          </thead>
+          <tbody data-field="legs"></tbody>
+        </table>
+      </div>
+
+      <div class="candidate-detail-grid">
+        <div>
+          <span class="detail-label">核心理由</span>
+          <ul data-field="reasons" class="reason-list"></ul>
+        </div>
+        <div>
+          <span class="detail-label">风险与失效条件</span>
+          <p data-field="risk-note">--</p>
+        </div>
+        <div>
+          <span class="detail-label">证据层级</span>
+          <ul data-field="evidence-summary" class="reason-list"></ul>
+        </div>
+        <div>
+          <span class="detail-label">完整退出计划</span>
+          <ul data-field="exit-plan" class="reason-list"></ul>
+        </div>
+      </div>
+
+      <footer class="approval-row">
+        <span data-field="view-only" class="view-only-label">VIEW_ONLY</span>
+        <div data-field="candidate-authority-slot" class="candidate-authority-slot"></div>
+      </footer>
+    </article>
+  </template>
+
+  <script type="module" src="/assets/app.js?v=20260909.6"></script>
+</body>
+</html>

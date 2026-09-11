@@ -1,0 +1,47 @@
+{
+  "candidate_version": "candidate_v1",
+  "case_count": 20,
+  "case_ids": [
+    "P2-01",
+    "P2-02",
+    "P2-03",
+    "P2-04",
+    "P2-05",
+    "P2-06",
+    "P2-07",
+    "P2-08",
+    "P2-09",
+    "P2-10",
+    "P2-11",
+    "P2-12",
+    "P2-13",
+    "P2-14",
+    "P2-15",
+    "P2-16",
+    "P2-17",
+    "P2-18",
+    "P2-19",
+    "P2-20"
+  ],
+  "cases_sha256": "226f9a2c3cb159aecb86b6a276119254453767fe66a1c13abeea7ddd08fa3fd7",
+  "content_identity_is_approval": false,
+  "critical_labels_require_second_human": true,
+  "formal_gold": false,
+  "human_signature_required_for_enablement": true,
+  "listed_options_review_required_for": [
+    "P2-18",
+    "P2-19"
+  ],
+  "live_model_calls_allowed": false,
+  "model_enablement_state": "MODEL_EVALUATION_PENDING",
+  "required_reviewer_roles": [
+    "Senior listed-options strategist or risk manager",
+    "Equity fundamental analyst with SEC-filing/accounting expertise",
+    "Quantitative research data/provenance specialist",
+    "Financial-services compliance and privacy reviewer",
+    "Product owner / experienced self-directed options operator"
+  ],
+  "review_disagreements_require_new_version": true,
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "schema": "options_copilot.phase2_eval_candidate_manifest.v1"
+}

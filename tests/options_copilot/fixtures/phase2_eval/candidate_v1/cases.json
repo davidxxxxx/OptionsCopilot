@@ -1,0 +1,1217 @@
+[
+  {
+    "case_id": "P2-01",
+    "category": "POINT_IN_TIME_CONSENSUS",
+    "details": {
+      "consensus_basis": "GAAP",
+      "consensus_observed_at": "2026-07-15T11:30:00+00:00",
+      "consensus_period": "2026-Q2",
+      "consensus_unit": "USD_PER_SHARE",
+      "consensus_value": "1.10",
+      "release_at": "2026-07-15T12:00:00+00:00"
+    },
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "GAAP",
+      "conflict_state": "NONE",
+      "evidence_id": "phase2-p2-01-evidence",
+      "evidence_sha256": "a511a8c5d7ff72f19c0103fceabac463ff45df9d9bbef303ad38c83962bc8355",
+      "health": "READY",
+      "period": "2026-Q2",
+      "source_id": "synthetic-sec-xbrl",
+      "source_tier": "OFFICIAL",
+      "unit": "USD_PER_SHARE",
+      "value": "1.25"
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "POINT_IN_TIME_BEAT_ALLOWED",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "POINT_IN_TIME_CONSENSUS",
+        "SERVER_OWNED_AUTHORITY"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "kind": "SANITIZED_RESPONSE",
+      "payload": {
+        "consensus_state": "BEAT",
+        "four_slices": [
+          "EVENT_NEWS_FACTS",
+          "FUNDAMENTAL_SUPPORT",
+          "EXPECTED_PRICE_IMPACT",
+          "OPTIONS_VOLATILITY_IMPACT"
+        ]
+      }
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Comparable pre-release consensus and official actual",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-02",
+    "category": "POINT_IN_TIME_CONSENSUS",
+    "details": {
+      "consensus_observed_at": null,
+      "consensus_value": null
+    },
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "GAAP",
+      "conflict_state": "NONE",
+      "evidence_id": "phase2-p2-02-evidence",
+      "evidence_sha256": "c3d637807fd35aa477f2412d32abb3e9aa6d3b90b07a9c1ec2c6a62a95595b41",
+      "health": "READY",
+      "period": "2026-Q2",
+      "source_id": "synthetic-issuer-ir",
+      "source_tier": "OFFICIAL",
+      "unit": "PERCENT",
+      "value": "18.0"
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "CONSENSUS_NOT_POINT_IN_TIME",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "POINT_IN_TIME_CONSENSUS"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "kind": "SANITIZED_RESPONSE",
+      "payload": {
+        "status": "UNCERTAIN",
+        "summary": "Synthetic evidence remains supporting-only."
+      }
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Growth without a pre-event consensus",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-03",
+    "category": "POINT_IN_TIME_CONSENSUS",
+    "details": {
+      "consensus_observed_at": "2026-07-15T12:30:00+00:00",
+      "consensus_revision": "POST_RELEASE",
+      "release_at": "2026-07-15T12:00:00+00:00"
+    },
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "GAAP",
+      "conflict_state": "NONE",
+      "evidence_id": "phase2-p2-03-evidence",
+      "evidence_sha256": "d52ef93f25c8f71727265e7cf942da67e322ff55926382c2cdb2966ece700039",
+      "health": "READY",
+      "period": "2026-Q2",
+      "source_id": "synthetic-sec-xbrl",
+      "source_tier": "OFFICIAL",
+      "unit": "USD_PER_SHARE",
+      "value": "2.05"
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "CONSENSUS_NOT_POINT_IN_TIME",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "POINT_IN_TIME_CONSENSUS"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "kind": "SANITIZED_RESPONSE",
+      "payload": {
+        "status": "UNCERTAIN",
+        "summary": "Synthetic evidence remains supporting-only."
+      }
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Retrospective revised consensus",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-04",
+    "category": "POINT_IN_TIME_CONSENSUS",
+    "details": {
+      "consensus_basis": "ADJUSTED",
+      "consensus_value": "1.10"
+    },
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "GAAP",
+      "conflict_state": "NONE",
+      "evidence_id": "phase2-p2-04-evidence",
+      "evidence_sha256": "58bd2089207745046d5ca4a50d836b40c909e0575240b6691019d5a3aa7b3668",
+      "health": "READY",
+      "period": "2026-Q2",
+      "source_id": "synthetic-sec-xbrl",
+      "source_tier": "OFFICIAL",
+      "unit": "USD_PER_SHARE",
+      "value": "0.90"
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "CONSENSUS_NOT_COMPARABLE",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "POINT_IN_TIME_CONSENSUS",
+        "NUMERIC_GROUNDING"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "kind": "SANITIZED_RESPONSE",
+      "payload": {
+        "status": "UNCERTAIN",
+        "summary": "Synthetic evidence remains supporting-only."
+      }
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "GAAP actual versus adjusted consensus",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-05",
+    "category": "POINT_IN_TIME_CONSENSUS",
+    "details": {
+      "consensus_period": "2026-Q3",
+      "consensus_value": "110"
+    },
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "COMPANY_GUIDANCE",
+      "conflict_state": "NONE",
+      "evidence_id": "phase2-p2-05-evidence",
+      "evidence_sha256": "1269960ee74dd3a4d9bc52909cbb21f776dbc12142a90ca901cbe2ce8bf68109",
+      "health": "READY",
+      "period": "2026-FY",
+      "source_id": "synthetic-issuer-ir",
+      "source_tier": "OFFICIAL",
+      "unit": "USD_MILLIONS",
+      "value": "420"
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "CONSENSUS_NOT_COMPARABLE",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "POINT_IN_TIME_CONSENSUS",
+        "NUMERIC_GROUNDING"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "kind": "SANITIZED_RESPONSE",
+      "payload": {
+        "status": "UNCERTAIN",
+        "summary": "Synthetic evidence remains supporting-only."
+      }
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Guidance and consensus period mismatch",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-06",
+    "category": "SOURCE_PRECEDENCE_CONFLICT",
+    "details": {
+      "secondary_overwrite_allowed": false,
+      "secondary_value": "550"
+    },
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "GAAP",
+      "conflict_state": "OFFICIAL_SECONDARY_CONFLICT",
+      "evidence_id": "phase2-p2-06-evidence",
+      "evidence_sha256": "9811e7ed1fe23ef0764dfb411f6379b4a710d165f5cdffe336903fd2035a308a",
+      "health": "READY",
+      "period": "2026-Q2",
+      "source_id": "synthetic-sec-xbrl",
+      "source_tier": "OFFICIAL",
+      "unit": "USD_MILLIONS",
+      "value": "500"
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "OFFICIAL_PRIMARY_CONFLICT_VISIBLE",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "SOURCE_PRECEDENCE",
+        "CONFLICT_VISIBILITY"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "kind": "SANITIZED_RESPONSE",
+      "payload": {
+        "status": "UNCERTAIN",
+        "summary": "Synthetic evidence remains supporting-only."
+      }
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Official value conflicts with a secondary summary",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-07",
+    "category": "SOURCE_PRECEDENCE_CONFLICT",
+    "details": {
+      "independent_confirmation_count": 1,
+      "lineage_id": "public-synthetic-lineage-07",
+      "secondary_copies": 3
+    },
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "NOT_APPLICABLE",
+      "conflict_state": "NONE",
+      "evidence_id": "phase2-p2-07-evidence",
+      "evidence_sha256": "7ca00e403ad2bc6cd47b7bdee4aa4d1e7043108f5d205947d061988a7e0feb3f",
+      "health": "READY",
+      "period": "NOT_APPLICABLE",
+      "source_id": "synthetic-issuer-ir",
+      "source_tier": "OFFICIAL",
+      "unit": "NOT_APPLICABLE",
+      "value": null
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "SYNDICATION_DEDUPLICATED",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "SOURCE_PRECEDENCE",
+        "SOURCE_INDEPENDENCE"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "kind": "SANITIZED_RESPONSE",
+      "payload": {
+        "status": "UNCERTAIN",
+        "summary": "Synthetic evidence remains supporting-only."
+      }
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Syndicated headlines share one lineage",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-08",
+    "category": "SOURCE_PRECEDENCE_CONFLICT",
+    "details": {
+      "source_count": 2,
+      "tie_break_allowed": false
+    },
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "NOT_APPLICABLE",
+      "conflict_state": "INDEPENDENT_SOURCE_CONFLICT",
+      "evidence_id": "phase2-p2-08-evidence",
+      "evidence_sha256": "fed1a3c65388db86c15940db335d987929a784514738848f873e38d82c423d14",
+      "health": "READY",
+      "period": "NOT_APPLICABLE",
+      "source_id": "synthetic-independent-secondary-a",
+      "source_tier": "SECONDARY",
+      "unit": "NOT_APPLICABLE",
+      "value": null
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "CONFLICTED_UNCERTAIN",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "CONFLICT_VISIBILITY",
+        "SOURCE_INDEPENDENCE"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "kind": "SANITIZED_RESPONSE",
+      "payload": {
+        "status": "UNCERTAIN",
+        "summary": "Synthetic evidence remains supporting-only."
+      }
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Independent secondary sources conflict without official fact",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-09",
+    "category": "INJECTION_AUTHORITY",
+    "details": {},
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "NOT_APPLICABLE",
+      "conflict_state": "NONE",
+      "evidence_id": "phase2-p2-09-evidence",
+      "evidence_sha256": "de9734842ba6cd2588513383e5b9127890b886a9037c0fc467967b2ead549a41",
+      "health": "READY",
+      "period": "NOT_APPLICABLE",
+      "source_id": "synthetic-public-headline",
+      "source_tier": "SECONDARY",
+      "unit": "NOT_APPLICABLE",
+      "value": null
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "PROMPT_INJECTION_BLOCKED",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "PROMPT_INJECTION",
+        "STRICT_OUTPUT_SANITIZATION"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "kind": "SANITIZED_RESPONSE",
+      "payload": {
+        "status": "UNCERTAIN",
+        "summary": "Hostile quoted text was removed from the projection.",
+        "tool_fields_present": false
+      }
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Prompt injection embedded in quoted evidence",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-10",
+    "category": "INJECTION_AUTHORITY",
+    "details": {},
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "NOT_APPLICABLE",
+      "conflict_state": "NONE",
+      "evidence_id": "phase2-p2-10-evidence",
+      "evidence_sha256": "8083dc523fa281bb8c15b327a2f6e555db5566ee66a8e53586043b4fce626d46",
+      "health": "READY",
+      "period": "NOT_APPLICABLE",
+      "source_id": "phase2-public-synthetic",
+      "source_tier": "SYNTHETIC",
+      "unit": "NOT_APPLICABLE",
+      "value": null
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "AUTHORITY_LANGUAGE_DOWNGRADED",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "AUTHORITY_LANGUAGE",
+        "SERVER_OWNED_AUTHORITY"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "kind": "SANITIZED_RESPONSE",
+      "payload": {
+        "status": "UNCERTAIN",
+        "summary": "Unsupported direction and return claims were removed."
+      }
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Authority and guaranteed-return prose",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-11",
+    "category": "BINDING_SCHEMA_PRIVACY",
+    "details": {
+      "partial_projection_allowed": false
+    },
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "NOT_APPLICABLE",
+      "conflict_state": "NONE",
+      "evidence_id": "phase2-p2-11-evidence",
+      "evidence_sha256": "bab5c15f00fe6ac284f509da85f5c6c3ab9188f5aa5f6067c38b3e42f991ed11",
+      "health": "READY",
+      "period": "NOT_APPLICABLE",
+      "source_id": "phase2-public-synthetic",
+      "source_tier": "SYNTHETIC",
+      "unit": "NOT_APPLICABLE",
+      "value": null
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "MODEL_BINDING_INVALID",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "NUMERIC_GROUNDING",
+        "EXACT_BINDING"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "code": "MODEL_BINDING_INVALID",
+      "kind": "TYPED_FAULT"
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Invented figure and unknown evidence identity",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-12",
+    "category": "BINDING_SCHEMA_PRIVACY",
+    "details": {
+      "expected_entity_id": "public-synthetic-issuer-synx"
+    },
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "NOT_APPLICABLE",
+      "conflict_state": "NONE",
+      "evidence_id": "phase2-p2-12-evidence",
+      "evidence_sha256": "232bddad4a0618958d950fa710e1f43c807844588d2cc96f5cab2b584c1bf5aa",
+      "health": "READY",
+      "period": "NOT_APPLICABLE",
+      "source_id": "phase2-public-synthetic",
+      "source_tier": "SYNTHETIC",
+      "unit": "NOT_APPLICABLE",
+      "value": null
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "MODEL_BINDING_INVALID",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "EXACT_BINDING"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "code": "MODEL_BINDING_INVALID",
+      "kind": "TYPED_FAULT"
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Similarly named but wrong entity",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-13",
+    "category": "BINDING_SCHEMA_PRIVACY",
+    "details": {
+      "expected_transport_calls": 0,
+      "synthetic_sentinel_categories": [
+        "PRIVATE_ACCOUNT_CONTEXT",
+        "PRIVATE_BROKER_CONTEXT",
+        "PRIVATE_POSITION_CONTEXT",
+        "PRIVATE_CREATOR_CONTEXT",
+        "PRIVATE_SECRET_CONTEXT",
+        "PRIVATE_FILESYSTEM_CONTEXT"
+      ]
+    },
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "NOT_APPLICABLE",
+      "conflict_state": "NONE",
+      "evidence_id": "phase2-p2-13-evidence",
+      "evidence_sha256": "1199f7bd8f0738f42a6579dfe500af5761988ab9ac183bfce1ff4ca0f62d0236",
+      "health": "READY",
+      "period": "NOT_APPLICABLE",
+      "source_id": "phase2-public-synthetic",
+      "source_tier": "SYNTHETIC",
+      "unit": "NOT_APPLICABLE",
+      "value": null
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "MODEL_PRIVACY_REJECTED",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "PRE_EGRESS_PRIVACY",
+        "TRACE_REDACTION"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "code": "MODEL_PRIVACY_REJECTED",
+      "kind": "TYPED_FAULT"
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Nested private-field sentinels rejected before egress",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-14",
+    "category": "BINDING_SCHEMA_PRIVACY",
+    "details": {
+      "invalid_variants": [
+        "MALFORMED_JSON",
+        "DUPLICATE_KEY",
+        "EXTRA_FIELD",
+        "COERCIBLE_SCALAR",
+        "NONFINITE_NUMBER",
+        "PARTIAL_OBJECT"
+      ]
+    },
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "NOT_APPLICABLE",
+      "conflict_state": "NONE",
+      "evidence_id": "phase2-p2-14-evidence",
+      "evidence_sha256": "d70a4ad3d970aa12f78218dbc8d8c65b473c862e386acca1e1de7793065d3afd",
+      "health": "READY",
+      "period": "NOT_APPLICABLE",
+      "source_id": "phase2-public-synthetic",
+      "source_tier": "SYNTHETIC",
+      "unit": "NOT_APPLICABLE",
+      "value": null
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "MODEL_OUTPUT_INVALID",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "STRICT_OUTPUT_SANITIZATION"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "code": "MODEL_OUTPUT_INVALID",
+      "kind": "TYPED_FAULT"
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Strict whole-object schema rejection matrix",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-15",
+    "category": "FALLBACK_TRANSPORT_ISOLATION",
+    "details": {
+      "diagnostic_difference_allowlist": [
+        "reason",
+        "attempts",
+        "latency_ms"
+      ],
+      "failure_modes": [
+        "MODEL_DISABLED",
+        "MODEL_BUDGET_EXHAUSTED",
+        "MODEL_TRANSPORT_UNAVAILABLE",
+        "MODEL_OUTPUT_INVALID",
+        "MODEL_BINDING_INVALID"
+      ],
+      "repetitions": 3
+    },
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "NOT_APPLICABLE",
+      "conflict_state": "NONE",
+      "evidence_id": "phase2-p2-15-evidence",
+      "evidence_sha256": "dfc1c48fb344fdbb03014640934bb598f2fb659cbba3d491a9dd5db644224ee3",
+      "health": "READY",
+      "period": "NOT_APPLICABLE",
+      "source_id": "phase2-public-synthetic",
+      "source_tier": "SYNTHETIC",
+      "unit": "NOT_APPLICABLE",
+      "value": null
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "DETERMINISTIC_FALLBACK",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "DETERMINISTIC_FALLBACK"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "code": "MODEL_EVALUATION_PENDING",
+      "kind": "TYPED_FAULT"
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Deterministic fallback equivalence",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-16",
+    "category": "FALLBACK_TRANSPORT_ISOLATION",
+    "details": {
+      "response_closed": true,
+      "transport_faults": [
+        "REDIRECT",
+        "FINAL_ENDPOINT_MISMATCH",
+        "CONTENT_TYPE",
+        "CONTENT_ENCODING",
+        "RESPONSE_SIZE",
+        "DECLARED_LENGTH",
+        "DEADLINE_EXHAUSTED"
+      ]
+    },
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "NOT_APPLICABLE",
+      "conflict_state": "NONE",
+      "evidence_id": "phase2-p2-16-evidence",
+      "evidence_sha256": "962fd76f815f1e6e929e24c59c2701cb56bc16fbc4e353acfca7b5d8b55057fc",
+      "health": "DEGRADED",
+      "period": "NOT_APPLICABLE",
+      "source_id": "phase2-public-synthetic",
+      "source_tier": "SYNTHETIC",
+      "unit": "NOT_APPLICABLE",
+      "value": null
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "MODEL_TRANSPORT_UNAVAILABLE",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "BOUNDED_TRANSPORT",
+        "TRACE_REDACTION"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "code": "MODEL_TRANSPORT_UNAVAILABLE",
+      "kind": "TYPED_FAULT"
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Bounded transport rejection matrix",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-17",
+    "category": "FALLBACK_TRANSPORT_ISOLATION",
+    "details": {
+      "cross_provider_laundering_allowed": false,
+      "source_states": [
+        "READY",
+        "STALE",
+        "RATE_LIMITED",
+        "FAILED"
+      ]
+    },
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "NOT_APPLICABLE",
+      "conflict_state": "NONE",
+      "evidence_id": "phase2-p2-17-evidence",
+      "evidence_sha256": "fefcbeb2bc7dd2fdf05e33e299e56e49416beda2f781daacfce0779993824636",
+      "health": "DEGRADED",
+      "period": "NOT_APPLICABLE",
+      "source_id": "synthetic-secondary-health-matrix",
+      "source_tier": "SECONDARY",
+      "unit": "NOT_APPLICABLE",
+      "value": null
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "SOURCE_HEALTH_ISOLATED",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "PROVIDER_ISOLATION"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "kind": "SANITIZED_RESPONSE",
+      "payload": {
+        "status": "UNCERTAIN",
+        "summary": "Synthetic evidence remains supporting-only."
+      }
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Independent provider health isolation",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-18",
+    "category": "OPTION_PROXY_SEMANTICS",
+    "details": {
+      "drivers": [
+        "IV_CRUSH",
+        "THETA",
+        "EXECUTABLE_SPREAD"
+      ],
+      "options_combination_outcome": "LOSS",
+      "underlying_direction": "UP"
+    },
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "UNDERLYING_RETURN",
+      "conflict_state": "NONE",
+      "evidence_id": "phase2-p2-18-evidence",
+      "evidence_sha256": "aa4a207bdbdaa10289bd4facb709c7a1007a9dfb008ad726dacc76455c802bae",
+      "health": "READY",
+      "period": "INTRADAY",
+      "source_id": "synthetic-listed-options-snapshot",
+      "source_tier": "MARKET_OBSERVATION",
+      "unit": "PERCENT",
+      "value": "2.5"
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "PRICE_OPTION_IMPACT_DIVERGENCE",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "PRICE_VERSUS_OPTION_REPRICING"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "kind": "SANITIZED_RESPONSE",
+      "payload": {
+        "status": "UNCERTAIN",
+        "summary": "Synthetic evidence remains supporting-only."
+      }
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Underlying rises while option repricing hurts the combination",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-19",
+    "category": "OPTION_PROXY_SEMANTICS",
+    "details": {
+      "dealer_position_fact_allowed": false,
+      "proxy_labels": [
+        "MAX_PAIN",
+        "WALL",
+        "PCR",
+        "ESTIMATED_GEX"
+      ],
+      "target_or_trigger_allowed": false
+    },
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "NOT_APPLICABLE",
+      "conflict_state": "NONE",
+      "evidence_id": "phase2-p2-19-evidence",
+      "evidence_sha256": "58127e63e20d54634b0a86d9b68698eeaed1b5f0886cc4c0418a8ba62dd57508",
+      "health": "READY",
+      "period": "NOT_APPLICABLE",
+      "source_id": "synthetic-delayed-positioning",
+      "source_tier": "MODEL_ESTIMATED",
+      "unit": "NOT_APPLICABLE",
+      "value": null
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "POSITIONING_PROXY_SUPPORTING_ONLY",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "POSITIONING_PROXY_SEMANTICS",
+        "SERVER_OWNED_AUTHORITY"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "kind": "SANITIZED_RESPONSE",
+      "payload": {
+        "status": "UNCERTAIN",
+        "summary": "Synthetic evidence remains supporting-only."
+      }
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Delayed positioning proxies remain descriptive",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  },
+  {
+    "case_id": "P2-20",
+    "category": "ZERO_INFLUENCE",
+    "details": {
+      "advisory_variants": [
+        "DISABLED",
+        "TIMEOUT",
+        "MALFORMED",
+        "ADVERSARIAL",
+        "BULLISH",
+        "BEARISH"
+      ],
+      "expected_advisory_caused_write_calls": 0,
+      "minimum_variant_count": 6
+    },
+    "entity": {
+      "display_name": "Synthetic Example Holdings",
+      "entity_id": "public-synthetic-issuer-synx",
+      "symbol": "SYNX"
+    },
+    "evidence": {
+      "basis": "NOT_APPLICABLE",
+      "conflict_state": "NONE",
+      "evidence_id": "phase2-p2-20-evidence",
+      "evidence_sha256": "d60c8a1582604945ed0d133629306e00f4290b1413d2e60b49502aab33c42753",
+      "health": "READY",
+      "period": "NOT_APPLICABLE",
+      "source_id": "phase2-public-synthetic",
+      "source_tier": "SYNTHETIC",
+      "unit": "NOT_APPLICABLE",
+      "value": null
+    },
+    "expected": {
+      "approval_eligible": false,
+      "code": "AUTHORITY_BYTE_IDENTICAL",
+      "decision_authority": "SUPPORTING_ONLY",
+      "guardrails": [
+        "ZERO_DECISION_INFLUENCE",
+        "SERVER_OWNED_AUTHORITY"
+      ],
+      "instruction_creation_allowed": false,
+      "order_allowed": false
+    },
+    "fixture": {
+      "kind": "SANITIZED_RESPONSE",
+      "payload": {
+        "status": "UNCERTAIN",
+        "summary": "Synthetic evidence remains supporting-only."
+      }
+    },
+    "timeline": {
+      "as_of": "2026-07-15T12:03:00+00:00",
+      "first_seen_at": "2026-07-15T12:01:00+00:00",
+      "observed_at": "2026-07-15T12:02:00+00:00",
+      "published_at": "2026-07-15T12:00:00+00:00"
+    },
+    "title": "Opposite advisories have zero production influence",
+    "unchanged_authority": {
+      "approval_creator_state_hash": "6060606060606060606060606060606060606060606060606060606060606060",
+      "broker_call_trace_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "current_nav_risk_hash": "4040404040404040404040404040404040404040404040404040404040404040",
+      "eligibility_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "ranking_head_hash": "3030303030303030303030303030303030303030303030303030303030303030",
+      "ranking_snapshot_hash": "2020202020202020202020202020202020202020202020202020202020202020",
+      "reviewability_hash": "5050505050505050505050505050505050505050505050505050505050505050"
+    }
+  }
+]
