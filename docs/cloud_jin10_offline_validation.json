@@ -1,0 +1,56 @@
+{
+  "schema": "options-copilot.cloud-jin10-offline-validation.v1",
+  "status": "PASS",
+  "validated_at": "2026-10-06T06:29:43Z",
+  "network_request_performed": false,
+  "secret_value_read_by_tests": false,
+  "focused_tests": {
+    "result": "PASS",
+    "passed": 31,
+    "duration_seconds": 0.68
+  },
+  "related_regression": {
+    "result": "PASS",
+    "passed": 164,
+    "deselected": 4,
+    "duration_seconds": 7.75,
+    "deselection_reason": "existing provider_probe tests require Windows G: drive semantics"
+  },
+  "locked_environment_verifier": {
+    "status": "PLATFORM_MARKER_MISMATCH_ONLY",
+    "missing": [
+      "pywin32",
+      "tzdata"
+    ],
+    "surplus": [],
+    "version_mismatches": {}
+  },
+  "verified_controls": {
+    "exact_endpoint": true,
+    "flash_only": true,
+    "initial_arguments_empty": true,
+    "optional_cursor_string_schema": true,
+    "additional_properties_false": true,
+    "maximum_items_20": true,
+    "overall_timeout_at_most_60_seconds": true,
+    "response_size_bounded": true,
+    "redirect_forbidden": true,
+    "session_cleanup_in_finally": true,
+    "session_cleanup_after_protocol_or_capability_rejection": true,
+    "session_cleanup_after_main_deadline_exhaustion": true,
+    "session_cleanup_confirmation_recorded": true,
+    "cleanup_failure_blocks_pass": true,
+    "rate_limit_not_retried": true,
+    "authentication_failure_explicit": true,
+    "secret_redaction": true,
+    "live_and_test_transport_evidence_distinct": true,
+    "live_dependency_injection_forbidden": true,
+    "deadline_not_catchable_by_exception_boundaries": true,
+    "receipt_time_after_response": true,
+    "coverage_not_24h": true,
+    "coordinator_store_reopen_hash_chain": true,
+    "supporting_only": true,
+    "production_eligibility_false": true,
+    "account_ibkr_order_access_false": true
+  }
+}

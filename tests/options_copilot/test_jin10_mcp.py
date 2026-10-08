@@ -13,6 +13,7 @@ import pytest
 from options_copilot.providers.jin10 import Jin10EventProvider
 from options_copilot.providers.jin10_mcp import (
     JIN10_MCP_URL,
+    MAXIMUM_JIN10_RESPONSE_BYTES,
     Jin10McpError,
     Jin10McpHttpClient,
     Jin10McpNewsBatch,
@@ -248,6 +249,145 @@ def test_streamable_http_client_default_budget_covers_complete_session() -> None
     assert client.overall_timeout_seconds == 40.0
 
 
+def test_flash_only_client_uses_verified_first_page_schema_and_empty_arguments() -> None:
+    class Opener(_McpOpener):
+        def open(self, request, *, timeout):
+            if request.get_method() == "POST":
+                payload = json.loads(request.data.decode("utf-8"))
+                if payload["method"] == "tools/list":
+                    self.requests.append((request, timeout))
+                    body = {
+                        "jsonrpc": "2.0",
+                        "id": payload["id"],
+                        "result": {
+                            "tools": [
+                                {
+                                    "name": "list_flash",
+                                    "inputSchema": {
+                                        "type": "object",
+                                        "properties": {"cursor": {"type": "string"}},
+                                        "additionalProperties": False,
+                                    },
+                                },
+                                {
+                                    "name": "list_news",
+                                    "inputSchema": {"type": "object"},
+                                },
+                            ]
+                        },
+                    }
+                    return _Response(json.dumps(body).encode())
+                if payload["method"] == "tools/call":
+                    assert payload["params"] == {
+                        "name": "list_flash",
+                        "arguments": {},
+                    }
+                    data = {
+                        "status": 200,
+                        "message": "success",
+                        "data": {"items": []},
+                    }
+                    body = {
+                        "jsonrpc": "2.0",
+                        "id": payload["id"],
+                        "result": {
+                            "content": [{"type": "text", "text": json.dumps(data)}],
+                            "isError": False,
+                        },
+                    }
+                    self.requests.append((request, timeout))
+                    return _Response(json.dumps(body).encode())
+            return super().open(request, timeout=timeout)
+
+    opener = Opener()
+    client = Jin10McpHttpClient(opener=opener, flash_only=True)
+    batch = client.fetch_news("fixture-token", limit=20)
+
+    assert set(batch.payloads) == {"list_flash"}
+    calls = [
+        json.loads(request.data.decode("utf-8"))
+        for request, _timeout in opener.requests
+        if request.get_method() == "POST" and request.data
+    ]
+    assert [item["params"].get("name") for item in calls if item["method"] == "tools/call"] == [
+        "list_flash"
+    ]
+    assert opener.requests[-1][0].get_method() == "DELETE"
+    assert client.session_cleanup() == {
+        "session_allocated": True,
+        "delete_attempted": True,
+        "result": "CONFIRMED",
+    }
+
+
+def test_flash_only_client_rejects_unverified_schema_without_tool_call() -> None:
+    class Opener(_McpOpener):
+        def open(self, request, *, timeout):
+            if request.get_method() == "POST":
+                payload = json.loads(request.data.decode("utf-8"))
+                if payload["method"] == "tools/list":
+                    self.requests.append((request, timeout))
+                    body = {
+                        "jsonrpc": "2.0",
+                        "id": payload["id"],
+                        "result": {
+                            "tools": [{
+                                "name": "list_flash",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"limit": {"type": "integer"}},
+                                    "additionalProperties": False,
+                                },
+                            }]
+                        },
+                    }
+                    return _Response(json.dumps(body).encode())
+            return super().open(request, timeout=timeout)
+
+    opener = Opener()
+    batch = Jin10McpHttpClient(opener=opener, flash_only=True).fetch_news(
+        "fixture-token", limit=20
+    )
+
+    assert batch.payloads == {}
+    assert batch.failures == ("LIST_FLASH:TOOL_SCHEMA_UNSUPPORTED",)
+    assert not any(
+        json.loads(request.data.decode("utf-8")).get("method") == "tools/call"
+        for request, _timeout in opener.requests
+        if request.get_method() == "POST" and request.data
+    )
+    assert opener.requests[-1][0].get_method() == "DELETE"
+
+
+def test_flash_only_client_enforces_record_limit_before_network() -> None:
+    opener = _McpOpener()
+    client = Jin10McpHttpClient(opener=opener, flash_only=True)
+
+    with pytest.raises(ValueError, match="limited to 20"):
+        client.fetch_news("fixture-token", limit=21)
+
+    assert opener.requests == []
+
+
+def test_mcp_response_size_limit_fails_closed() -> None:
+    class OversizedResponse(_Response):
+        def __init__(self) -> None:
+            super().__init__(b"")
+            self.headers["Content-Length"] = str(MAXIMUM_JIN10_RESPONSE_BYTES + 1)
+
+    class Opener:
+        @staticmethod
+        def open(_request, *, timeout):
+            return OversizedResponse()
+
+    with pytest.raises(Jin10McpError) as captured:
+        Jin10McpHttpClient(opener=Opener(), flash_only=True).fetch_news(
+            "fixture-token", limit=20
+        )
+
+    assert captured.value.reason == "RESPONSE_TOO_LARGE"
+
+
 def test_streamable_http_client_fetches_bounded_calendar_tool() -> None:
     opener = _McpOpener()
     client = Jin10McpHttpClient(opener=opener, timeout_seconds=3)
@@ -324,6 +464,41 @@ def test_provider_projects_flash_and_news_as_supporting_only() -> None:
     assert {event.source_id for event in events} == {"flash-1", "news-1"}
 
 
+def test_provider_records_receipt_time_after_mcp_call() -> None:
+    attempted = datetime(2026, 8, 6, 6, 29, tzinfo=timezone.utc)
+    received = datetime(2026, 8, 6, 6, 30, tzinfo=timezone.utc)
+    ticks = iter((attempted, received))
+
+    class Client:
+        transport_verified = True
+
+        @staticmethod
+        def fetch_news(token: str, *, limit: int) -> Jin10McpNewsBatch:
+            assert token == "fixture-token"
+            return Jin10McpNewsBatch(payloads={
+                "list_flash": {
+                    "status": 200,
+                    "data": {"items": [{
+                        "content": "公开快讯",
+                        "time": "2026-08-06T14:28:00+08:00",
+                    }]},
+                }
+            })
+
+    provider = Jin10EventProvider(
+        _Secrets("fixture-token"),
+        mcp_client=Client(),
+        now=lambda: next(ticks),
+    )
+
+    events = provider.news(["SPY"], limit=20)
+
+    assert len(events) == 1
+    assert events[0].published_at == datetime(2026, 8, 6, 6, 28, tzinfo=timezone.utc)
+    assert events[0].observed_at == received
+    assert events[0].ingested_at == received
+
+
 def test_auth_failure_is_redacted_and_fails_closed() -> None:
     token = "sentinel-jin10-token-must-not-leak"
 
@@ -373,6 +548,78 @@ def test_rate_limit_is_redacted_and_never_retried_by_transport() -> None:
     )
 
 
+def test_flash_tool_rate_limit_stops_and_session_is_cleaned_up() -> None:
+    class Opener(_McpOpener):
+        tool_calls = 0
+
+        def open(self, request, *, timeout):
+            if request.get_method() == "POST":
+                payload = json.loads(request.data.decode("utf-8"))
+                if payload["method"] == "tools/list":
+                    self.requests.append((request, timeout))
+                    body = {
+                        "jsonrpc": "2.0",
+                        "id": payload["id"],
+                        "result": {"tools": [{
+                            "name": "list_flash",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {"cursor": {"type": "string"}},
+                                "additionalProperties": False,
+                            },
+                        }]},
+                    }
+                    return _Response(json.dumps(body).encode())
+                if payload["method"] == "tools/call":
+                    self.requests.append((request, timeout))
+                    self.tool_calls += 1
+                    raise HTTPError(request.full_url, 429, "redacted", {}, None)
+            return super().open(request, timeout=timeout)
+
+    opener = Opener()
+    batch = Jin10McpHttpClient(opener=opener, flash_only=True).fetch_news(
+        "fixture-token", limit=20
+    )
+
+    assert opener.tool_calls == 1
+    assert batch.failures == ("LIST_FLASH:RATE_LIMITED",)
+    assert opener.requests[-1][0].get_method() == "DELETE"
+
+    provider = Jin10EventProvider(
+        _Secrets("fixture-token"),
+        mcp_client=Jin10McpHttpClient(opener=Opener(), flash_only=True),
+        now=lambda: NOW,
+        maximum_news_items=20,
+    )
+    assert provider.news(["SPY"], limit=50) == ()
+    assert provider.health == "RATE_LIMITED"
+    assert provider.health_reason == "rate_limited"
+
+
+def test_provider_does_not_hide_tool_call_authentication_failure() -> None:
+    batch = Jin10McpNewsBatch(
+        payloads={},
+        failures=("list_flash:AUTHENTICATION_FAILED",),
+    )
+
+    class Client:
+        transport_verified = True
+
+        @staticmethod
+        def fetch_news(token: str, *, limit: int) -> Jin10McpNewsBatch:
+            return batch
+
+    provider = Jin10EventProvider(
+        _Secrets("fixture-token"),
+        mcp_client=Client(),
+        now=lambda: NOW,
+    )
+
+    assert provider.news(["SPY"], limit=20) == ()
+    assert provider.health == "DOWN"
+    assert provider.health_reason == "authentication_failed"
+
+
 def test_bad_json_drops_sensitive_parser_context() -> None:
     token = "sentinel-jin10-bad-json-token"
 
@@ -415,7 +662,7 @@ def test_unexpected_internal_failure_drops_sensitive_exception_context() -> None
 
 
 def test_overall_deadline_bounds_the_complete_short_session() -> None:
-    ticks = iter((0.0, 0.0, 4.0, 4.0))
+    ticks = iter((0.0, 0.0, 4.0, 4.0, 4.0))
     opener = _McpOpener()
     client = Jin10McpHttpClient(
         opener=opener,
@@ -428,7 +675,11 @@ def test_overall_deadline_bounds_the_complete_short_session() -> None:
         client.fetch_news("fixture-token", limit=10)
 
     assert captured.value.reason == "REQUEST_TIMEOUT"
-    assert len(opener.requests) == 1
+    assert [request.get_method() for request, _timeout in opener.requests] == [
+        "POST",
+        "DELETE",
+    ]
+    assert client.session_cleanup()["result"] == "CONFIRMED"
 
 
 def test_unexpected_redirect_never_leaves_exact_mcp_endpoint() -> None:
@@ -460,7 +711,10 @@ def test_initialize_requires_declared_tools_capability() -> None:
                             "capabilities": {},
                         },
                     }
-                    return _Response(json.dumps(body).encode())
+                    return _Response(
+                        json.dumps(body).encode(),
+                        session_id="capability-failure-session",
+                    )
             return super().open(request, timeout=timeout)
 
     client = Jin10McpHttpClient(opener=Opener())
@@ -468,6 +722,41 @@ def test_initialize_requires_declared_tools_capability() -> None:
         client.fetch_news("fixture-token", limit=10)
 
     assert captured.value.reason == "TOOLS_CAPABILITY_UNAVAILABLE"
+    assert client.opener.requests[-1][0].get_method() == "DELETE"
+
+
+def test_unsupported_protocol_after_session_allocation_is_cleaned_up() -> None:
+    class Opener(_McpOpener):
+        def open(self, request, *, timeout):
+            if request.get_method() == "POST":
+                payload = json.loads(request.data.decode("utf-8"))
+                if payload["method"] == "initialize":
+                    self.requests.append((request, timeout))
+                    body = {
+                        "jsonrpc": "2.0",
+                        "id": payload["id"],
+                        "result": {
+                            "protocolVersion": "2099-01-01",
+                            "capabilities": {"tools": {}},
+                        },
+                    }
+                    return _Response(
+                        json.dumps(body).encode(),
+                        session_id="unsupported-protocol-session",
+                    )
+            return super().open(request, timeout=timeout)
+
+    opener = Opener()
+    client = Jin10McpHttpClient(opener=opener, flash_only=True)
+
+    with pytest.raises(Jin10McpError) as captured:
+        client.fetch_news("fixture-token", limit=20)
+
+    assert captured.value.reason == "UNSUPPORTED_PROTOCOL"
+    assert [request.get_method() for request, _timeout in opener.requests] == [
+        "POST",
+        "DELETE",
+    ]
 
 
 def test_streaming_initialize_stops_after_matching_event_without_waiting_for_eof() -> None:

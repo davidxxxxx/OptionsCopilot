@@ -17,6 +17,7 @@ class Jin10EventProvider:
     """Read-only supplemental discovery; events can never carry trade authority."""
 
     SECRET_NAME = "JIN10_MCP_TOKEN"
+    NETWORK_SECRET_NAME = "JIN10_MCP_NETWORK_TOKEN"
 
     def __init__(
         self,
@@ -26,6 +27,8 @@ class Jin10EventProvider:
         mcp_client: object | None = None,
         now: Callable[[], datetime] | None = None,
         timeout_seconds: float = 8.0,
+        secret_name: str = SECRET_NAME,
+        maximum_news_items: int = 200,
     ) -> None:
         if transport is not None and mcp_client is not None:
             raise ValueError("transport and mcp_client are mutually exclusive")
@@ -34,6 +37,16 @@ class Jin10EventProvider:
         self._mcp_client = mcp_client
         self._now = now or (lambda: datetime.now(timezone.utc))
         self._timeout = timeout_seconds
+        if secret_name not in {self.SECRET_NAME, self.NETWORK_SECRET_NAME}:
+            raise ValueError("unsupported Jin10 secret name")
+        if (
+            isinstance(maximum_news_items, bool)
+            or not isinstance(maximum_news_items, int)
+            or not 1 <= maximum_news_items <= 200
+        ):
+            raise ValueError("maximum_news_items must be between 1 and 200")
+        self._secret_name = secret_name
+        self._maximum_news_items = maximum_news_items
         self.transport_verified = (
             mcp_client is not None
             and getattr(mcp_client, "transport_verified", False) is True
@@ -46,8 +59,9 @@ class Jin10EventProvider:
         if not symbols or not 1 <= limit <= 200:
             raise ValueError("symbols and a limit between 1 and 200 are required")
         tickers = tuple(_symbol(symbol) for symbol in symbols)
+        effective_limit = min(limit, self._maximum_news_items)
         token = (
-            self._secrets.get(self.SECRET_NAME)
+            self._secrets.get(self._secret_name)
             if self._secrets is not None
             else None
         )
@@ -58,7 +72,7 @@ class Jin10EventProvider:
             self.health, self.health_reason = "DISABLED", "secret_or_transport_unavailable"
             return ()
         if self._mcp_client is not None:
-            return self._mcp_news(token, symbols=tickers, limit=limit)
+            return self._mcp_news(token, symbols=tickers, limit=effective_limit)
         try:
             payload = self._transport(
                 "https://api.jin10.com/config/global",
@@ -122,10 +136,10 @@ class Jin10EventProvider:
         symbols: Sequence[str],
         limit: int,
     ) -> tuple[NewsEvent, ...]:
-        observed = self._now()
+        attempted_at = self._now()
         if (
             self._retry_not_before is not None
-            and observed < self._retry_not_before
+            and attempted_at < self._retry_not_before
         ):
             self.health, self.health_reason = "DEGRADED", "cooldown_active"
             return ()
@@ -141,7 +155,7 @@ class Jin10EventProvider:
         except Jin10McpError as exc:
             self.health, self.health_reason = _mcp_failure_health(exc.reason)
             if exc.reason == "RATE_LIMITED":
-                self._retry_not_before = observed + timedelta(minutes=5)
+                self._retry_not_before = attempted_at + timedelta(minutes=5)
             return ()
         except Exception:
             self.health, self.health_reason = "DOWN", "request_failed"
@@ -150,6 +164,7 @@ class Jin10EventProvider:
             self.health, self.health_reason = "DOWN", "bad_json"
             return ()
 
+        received_at = self._now()
         self._retry_not_before = None
         events: list[NewsEvent] = []
         malformed = False
@@ -169,7 +184,7 @@ class Jin10EventProvider:
                 event = _mcp_event(
                     tool_name,
                     item,
-                    observed=observed,
+                    observed=received_at,
                     allowed_symbols=symbols,
                 )
                 if event is None:
@@ -185,10 +200,16 @@ class Jin10EventProvider:
         if batch.failures:
             if trusted_tool_result:
                 self.health, self.health_reason = "DEGRADED", "partial_tool_failure"
+            elif any(
+                item.endswith(":AUTHENTICATION_FAILED") for item in batch.failures
+            ):
+                self.health, self.health_reason = "DOWN", "authentication_failed"
+            elif any(item.endswith(":RATE_LIMITED") for item in batch.failures):
+                self.health, self.health_reason = "RATE_LIMITED", "rate_limited"
             else:
                 self.health, self.health_reason = "DOWN", "no_usable_records"
             if any(item.endswith(":RATE_LIMITED") for item in batch.failures):
-                self._retry_not_before = observed + timedelta(minutes=5)
+                self._retry_not_before = attempted_at + timedelta(minutes=5)
         elif malformed:
             if trusted_tool_result:
                 self.health, self.health_reason = "DEGRADED", "partial_parse"

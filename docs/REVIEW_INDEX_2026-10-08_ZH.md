@@ -2,13 +2,15 @@
 
 ## 先看结论
 
-本次交付是**独立审阅分支上的文档整理**：给已有源码建立阅读顺序，核对已上传内容，并明确尚未并入的增量。应用代码、测试代码和依赖文件没有随本次整理更新。
+本分支先完成源码阅读索引，现已在同一审阅分支中整合**经过哈希核验的独立云端 Jin10 研究增量**，包含真实源码、provider 修改、测试及脱敏验收记录。Windows 市场观察与 HTTP 研究接入增量仍未取得，未在本次整合。
 
 - 已核对的远端基线：[`0cac427ad993d4b89ad43a721a6aa249df3aa440`](https://github.com/davidxxxxx/OptionsCopilot/commit/0cac427ad993d4b89ad43a721a6aa249df3aa440)，提交时间 2026-10-02 12:41:11 UTC。
 - 基线完整目录树包含 **419 个文件，其中 392 个 Python 文件**。这是文件清点，不是执行或测试结果。
 - 现有源码可以审阅本地只读应用、Jin10 采集基础、新闻证据存储、研究池和风险门槛。
-- 后续的独立云端 Jin10 研究增量、Windows 市场观察采集与 HTTP 研究接入增量，**尚未出现在该远端基线中**。本次文档没有补入这些源码。
-- 本次仅通过 GitHub 读取源码、目录和检查状态；没有执行安装、单元测试、实时数据采集、GUI 验收或券商连接。
+- 独立云端 Jin10 研究增量已覆盖到匹配的基线之上；11 个交付文件逐一核验，其中依赖锁文件与原分支相同。详见[本次整合与复测记录](CLOUD_JIN10_INTEGRATION_2026-10-08_ZH.md)。
+- 本次已创建隔离的 Python 3.12 哈希锁定依赖环境并完成限定离线复测；没有运行实时数据采集、GUI 验收或券商连接。
+
+**独立复核发现两项未修复限制：初始化 body 非法或 RPC id 不匹配时可能遗漏 session 清理；内部一次性告警不能绝对限制 finally 清理耗时。冻结包保留原样，仅供审阅，不认定生产可用。未来如授权实时运行，必须保留进程外超时保护。详情及历史验收结论的适用范围见[已知限制](CLOUD_JIN10_INTEGRATION_2026-10-08_ZH.md#审阅结论与已知限制)。**
 
 审阅时请把“远端存在源码”“历史曾验证”“本次已重测”“生产可用”分开判断。
 
@@ -47,28 +49,22 @@
 
 前一条提供支持性研究证据；后一条仍有 [STATUS.md](STATUS.md) 记载的生产阻塞。新闻采集成功不会自动解除行情、模型或授权缺口。
 
-## 3. 已有文件与尚未上传的增量
+## 3. 已整合文件与尚未取得的增量
 
-### 3.1 Jin10：基础已在，独立云端增量未并入
+### 3.1 Jin10：独立云端增量已整合
 
-**基线已有：**
+**保留的基础：** `news_runtime.py`、`storage/evidence.py` 与生产凭据装配不变；现有生产路径仍使用原凭据合同。
 
-- `options_copilot/providers/jin10_mcp.py`
-- `options_copilot/providers/jin10.py`
-- `options_copilot/news_runtime.py`
-- `options_copilot/storage/evidence.py`
-- [test_jin10_mcp.py](../tests/options_copilot/test_jin10_mcp.py)、[test_jin10_entity_linking.py](../tests/options_copilot/test_jin10_entity_linking.py)、[test_evidence_store.py](../tests/options_copilot/test_evidence_store.py)
+**本次整合：**
 
-**基线未包含：**
+- 新增一次性研究入口 [cloud_jin10_research.py](../options_copilot/operations/cloud_jin10_research.py) 及其[测试](../tests/options_copilot/test_cloud_jin10_research.py)。
+- 更新 [jin10_mcp.py](../options_copilot/providers/jin10_mcp.py)、[jin10.py](../options_copilot/providers/jin10.py) 和 [test_jin10_mcp.py](../tests/options_copilot/test_jin10_mcp.py)：首屏 flash-only 请求、接收时间、明确错误分类、session 清理预算及清理确认记录；初始化早期失败追踪和绝对超时仍有上方注明的缺口。
+- 纳入[验收说明](CLOUD_JIN10_RESEARCH_ACCEPTANCE_ZH.md)、[冻结基线清单](cloud_jin10_baseline_manifest.json)、[历史离线验证记录](cloud_jin10_offline_validation.json)、[脱敏真实验收摘要](../SANITIZED_LIVE_ACCEPTANCE.json)和[原包交付说明](../README_验收交付.md)。
+- `requirements-dev.lock` 与已核验交付包一致，无依赖版本变更。
 
-- 后续独立入口 `options_copilot/operations/cloud_jin10_research.py`
-- 后续验收文档 `docs/CLOUD_JIN10_RESEARCH_ACCEPTANCE_ZH.md`
-- 云端增量包对 `jin10_mcp.py` 和 `jin10.py` 的后续修改
-- 该增量包的基线清单和离线验证记录
+**2026-10-08 本次离线复测：** 聚焦测试 31 passed；相关回归 164 passed、4 deselected。排除的四项是要求 Windows `G:` 盘语义的既有 provider-probe 用例。完整命令、环境及其他检查见[本次整合记录](CLOUD_JIN10_INTEGRATION_2026-10-08_ZH.md)。
 
-远端 provider 文件存在，只能证明旧版本基础存在。它们不代表后续云端覆盖包已上传。
-
-**历史验证说明，非本次复测：** 后续独立云端研究曾在 2026-10-06 / 2026-10-08 记录过锁定基线检查，以及真实首页 20 条数据经 provider / coordinator、10 条展示投影、20 条证据入库、关闭重开后哈希校验的验证。该记录只覆盖对应时点和研究链路，不构成 24 小时持续服务、历史回填完整性、当前新闻时效或完整期权功能验收。本次未取得并逐字节复核该覆盖包，未重放上述测试；不能把历史结果归到本审阅分支。
+**历史真实运行，非本次重跑：** 原包记录 2026-10-06 真实首页 20 条数据经 provider / coordinator、10 条展示投影、20 条证据入库及关闭重开后的哈希复核。原包文档内“未提交、推送或部署”等陈述描述当时交付状态。本次保留其原始内容与哈希，不把该历史结果写成新的实时验收。这不构成 24 小时持续服务、完整历史回填、当前新闻时效或完整期权功能验收。
 
 ### 3.2 Windows 市场观察与 HTTP 接入：未并入
 
@@ -130,18 +126,18 @@ git diff --check
 node --check options_copilot/frontend/app.js
 ```
 
-这只是指定冒烟范围。完整测试目录还依赖未公开分发的真实授权、合约及迁移材料，可能在收集阶段或执行阶段失败。现有文档记载的 2026-10-02 **236 passed** 包括上述七模块和另一个明确列出的依赖文档检查；这是历史发布结果，**本次未运行**。
+这只是指定冒烟范围。完整测试目录还依赖未公开分发的真实授权、合约及迁移材料，可能在收集阶段或执行阶段失败。现有文档记载的 2026-10-02 **236 passed** 包括上述七模块和另一个明确列出的依赖文档检查。本次对应范围的重跑结果另见[整合记录](CLOUD_JIN10_INTEGRATION_2026-10-08_ZH.md)，不与完整测试套件混称。
 
 ## 5. 当前检查状态与安全边界
 
 ### 本次实际核对
 
 - 完整远端树可读取，返回未截断；基线及上述路径已核对。
-- 初始分支列表只有 `main`；本次审阅内容另建独立文档分支。
+- 初始文档整理提交 `a63657db55a8b4122291ef52ab1b7a30b9094801` 仅增加本索引；本次代码整合继续使用同一独立审阅分支，保留该提交。
 - 基线树没有 `.github/workflows/` 文件。
 - 查询时 GitHub Actions 返回 0 个运行，基线 commit 返回 0 个 check run、0 个 commit status。
 - 空检查列表不等于 CI 通过；状态接口的 `pending` 也不能单独解释为有任务正在执行。
-- 本次没有运行测试，不能补发“全绿”或生产可用结论。
+- 本次限定离线测试与静态检查结果见[整合记录](CLOUD_JIN10_INTEGRATION_2026-10-08_ZH.md)。没有运行全套测试、实时云端采集、Windows / GUI 或券商验收，不能给出完整“全绿”或生产可用结论。
 
 ### 审阅和本地配置须保留的边界
 
@@ -156,11 +152,11 @@ node --check options_copilot/frontend/app.js
 ## 6. 下一步验收清单
 
 1. **先审阅远端基线。** 确认功能划分、安全门槛和已知缺口是否符合项目目标。
-2. **单独整理云端增量。** 取得可读取文件，核验它声明的基线及逐文件哈希，区分新增文件与 provider 修改，并复跑覆盖包规定的检查。
+2. **审阅已整合的云端增量。** 核对新增入口、provider 修改、错误与超时边界，以及本次离线复测证据。保留 `SUPPORTING_ONLY`，不把首屏研究结果升级为生产授权。
 3. **单独整理 Windows 增量。** 从实际工作区取得采集器、CLI、HTTP 研究接入、API/前端接线及测试，完成隐私筛选和文件级差异。
 4. **明确版本线后再整合。** 对 v4 先取得完整材料并比较基线；不跨版本套用最小覆盖包。
 5. **在真实目标环境重测。** 分别记录源码检查、锁定依赖、限定离线测试、只读集成与 GUI 结果，给每项绑定确切 commit 和时间。
-6. **确认后另行合并。** 当前分支仅供审阅；源码整合、合并、部署、常驻采集和实时数据验收均需各自的实际交付证据。
+6. **确认后另行合并。** 当前分支仅供审阅；本次云端源码已整合，尚未合入 `main`。没有创建 PR、合并、部署、常驻采集或新的实时数据验收。
 
 ---
 

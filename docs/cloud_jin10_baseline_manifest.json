@@ -1,0 +1,49 @@
+{
+  "schema": "options-copilot.cloud-jin10-baseline.v1",
+  "captured_at": "2026-10-06T06:05:44Z",
+  "independent_review_remediation_at": "2026-10-06T06:29:43Z",
+  "baseline": {
+    "branch": "work",
+    "commit": "0cac427ad993d4b89ad43a721a6aa249df3aa440",
+    "worktree_was_clean_before_changes": true,
+    "library_v4_equivalence_claimed": false,
+    "library_v4_modified": false
+  },
+  "baseline_file_sha256": {
+    "options_copilot/news_runtime.py": "21f9efdae39e7efe06da4bbdff9c3eabc1315122d46909a1d0fe50d23c2e1580",
+    "options_copilot/providers/jin10.py": "c6450b385c206ff0d590ee38f6bebf2dfc9c7c5e2d99db848ef6f600531169c4",
+    "options_copilot/providers/jin10_mcp.py": "71d3c0cd22766bfed2ccc968e10de37d8ef014054598c5180ace793412cc4244",
+    "options_copilot/security/jin10_credentials.py": "1a096f06521caf01e308bda53575133f824324396b742365b888b89623d72fe6"
+  },
+  "frozen_patch_file_sha256": {
+    "options_copilot/operations/cloud_jin10_research.py": "4868c1c25de3d53e3e66b602804d2778d5963736ce707ea4f6cb9cc92692be8d",
+    "options_copilot/providers/jin10.py": "d3edac678487b640231391c263014de543fcaa06cfbd1f05a98cb8be2a097b6b",
+    "options_copilot/providers/jin10_mcp.py": "614a955961b6e3ceb9925242cbc5e206e8582dd556a9d4ff8d5f3a81c5b76e8a",
+    "tests/options_copilot/test_cloud_jin10_research.py": "fe0f8614a9267581d7c9962866af65773a649f5ea0db5e860cc484e3335c779d",
+    "tests/options_copilot/test_jin10_mcp.py": "18dc906944dc50dd2b877443bd0e7b30ade5901d69c71e0e4e906372bd9bc722"
+  },
+  "credential_contract": {
+    "environment_name": "JIN10_MCP_NETWORK_TOKEN",
+    "fixed_endpoint": "https://mcp.jin10.com/mcp",
+    "local_token_read": false,
+    "dpapi_read": false,
+    "credential_persisted": false
+  },
+  "execution_contract": {
+    "network_run_performed": false,
+    "source_tool": "list_flash",
+    "initial_arguments": {},
+    "pages": 1,
+    "maximum_items": 20,
+    "mcp_timeout_seconds": 50,
+    "session_delete_timeout_seconds": 2,
+    "session_cleanup_evidence_required": true,
+    "end_to_end_timeout_seconds": 60,
+    "live_dependency_injection": false,
+    "background_service": false,
+    "ibkr": false,
+    "account": false,
+    "orders": false,
+    "decision_authority": "SUPPORTING_ONLY"
+  }
+}

@@ -27,11 +27,13 @@ JIN10_MCP_URL = "https://mcp.jin10.com/mcp"
 JIN10_MCP_PROTOCOL_VERSION = "2025-03-26"
 JIN10_MCP_USER_AGENT = "OptionsCopilot/0.1 read-only-jin10-mcp"
 MAXIMUM_JIN10_RESPONSE_BYTES = 2 * 1024 * 1024
+SESSION_DELETE_TIMEOUT_SECONDS = 2.0
 _SUPPORTED_PROTOCOL_VERSIONS = frozenset(
     {"2024-11-05", "2025-03-26", "2025-06-18"}
 )
 _SESSION_ID = re.compile(r"^[\x21-\x7e]{1,512}$")
 _DISCOVERY_TOOLS = ("list_flash", "list_news")
+_FLASH_ONLY_TOOLS = ("list_flash",)
 _CALENDAR_TOOL = "list_calendar"
 _METADATA_TOOLS = frozenset((*_DISCOVERY_TOOLS, _CALENDAR_TOOL))
 
@@ -101,9 +103,13 @@ class Jin10McpHttpClient:
     opener: object | None = None
     timeout_seconds: float = 8.0
     overall_timeout_seconds: float = 40.0
+    flash_only: bool = False
     monotonic_clock: Callable[[], float] = monotonic
     _request_number: int = field(default=0, init=False, repr=False)
     _request_lock: Lock = field(default_factory=Lock, init=False, repr=False)
+    _session_allocated: bool = field(default=False, init=False, repr=False)
+    _session_delete_attempted: bool = field(default=False, init=False, repr=False)
+    _session_cleanup_result: str = field(default="NOT_REQUIRED", init=False, repr=False)
 
     transport_verified = True
 
@@ -124,6 +130,8 @@ class Jin10McpHttpClient:
             raise ValueError("overall_timeout_seconds must be between 0 and 60")
         if not callable(self.monotonic_clock):
             raise TypeError("monotonic_clock must be callable")
+        if not isinstance(self.flash_only, bool):
+            raise TypeError("flash_only must be a boolean")
         if self.opener is None:
             self.opener = build_opener(ProxyHandler(), _NoRedirect())
 
@@ -133,6 +141,12 @@ class Jin10McpHttpClient:
         checked_token = _token(token)
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 200:
             raise ValueError("limit must be an integer between 1 and 200")
+        if self.flash_only and limit > 20:
+            raise ValueError("flash-only discovery is limited to 20 records")
+        discovery_tools = _FLASH_ONLY_TOOLS if self.flash_only else _DISCOVERY_TOOLS
+        self._session_allocated = False
+        self._session_delete_attempted = False
+        self._session_cleanup_result = "NOT_REQUIRED"
 
         session_id: str | None = None
         protocol_version = JIN10_MCP_PROTOCOL_VERSION
@@ -156,6 +170,11 @@ class Jin10McpHttpClient:
                 protocol_version=protocol_version,
                 deadline_at=deadline_at,
             )
+            # The server may allocate a session before the response body passes
+            # protocol/capability validation.  Retain it immediately so every
+            # subsequent failure still reaches the bounded DELETE in finally.
+            session_id = initialize.session_id
+            self._session_allocated = session_id is not None
             protocol_version = str(initialize.result.get("protocolVersion") or "")
             if protocol_version not in _SUPPORTED_PROTOCOL_VERSIONS:
                 raise Jin10McpError("UNSUPPORTED_PROTOCOL")
@@ -165,7 +184,6 @@ class Jin10McpHttpClient:
                 or not isinstance(capabilities.get("tools"), Mapping)
             ):
                 raise Jin10McpError("TOOLS_CAPABILITY_UNAVAILABLE")
-            session_id = initialize.session_id
             self._notification(
                 checked_token,
                 method="notifications/initialized",
@@ -182,12 +200,16 @@ class Jin10McpHttpClient:
             )
             payloads: dict[str, Mapping[str, object]] = {}
             failures: list[str] = []
-            for tool_name in _DISCOVERY_TOOLS:
+            for tool_name in discovery_tools:
                 descriptor = tools.get(tool_name)
                 if descriptor is None:
                     failures.append(f"{tool_name}:TOOL_UNAVAILABLE")
                     continue
-                arguments = _tool_arguments(descriptor, limit=limit)
+                arguments = (
+                    _initial_flash_arguments(descriptor)
+                    if self.flash_only
+                    else _tool_arguments(descriptor, limit=limit)
+                )
                 if arguments is None:
                     failures.append(f"{tool_name}:TOOL_SCHEMA_UNSUPPORTED")
                     continue
@@ -216,11 +238,16 @@ class Jin10McpHttpClient:
             pass
         finally:
             if session_id is not None and deadline_at is not None:
-                self._delete_session(
+                self._session_delete_attempted = True
+                self._session_cleanup_result = "FAILED"
+                self._session_cleanup_result = self._delete_session(
                     checked_token,
                     session_id=session_id,
                     protocol_version=protocol_version,
-                    deadline_at=deadline_at,
+                    deadline_at=(
+                        float(self.monotonic_clock())
+                        + SESSION_DELETE_TIMEOUT_SECONDS
+                    ),
                 )
         raise Jin10McpError("PROTOCOL_ERROR") from None
 
@@ -488,6 +515,15 @@ class Jin10McpHttpClient:
             raise Jin10McpError("REQUEST_TIMEOUT")
         return min(self.timeout_seconds, remaining)
 
+    def session_cleanup(self) -> dict[str, object]:
+        """Return fixed, non-sensitive evidence for the latest news session."""
+
+        return {
+            "session_allocated": self._session_allocated,
+            "delete_attempted": self._session_delete_attempted,
+            "result": self._session_cleanup_result,
+        }
+
     def _delete_session(
         self,
         token: str,
@@ -495,7 +531,7 @@ class Jin10McpHttpClient:
         session_id: str,
         protocol_version: str,
         deadline_at: float,
-    ) -> None:
+    ) -> str:
         request = Request(
             JIN10_MCP_URL,
             data=None,
@@ -514,12 +550,15 @@ class Jin10McpHttpClient:
             )
             with response:
                 if str(response.geturl()) != JIN10_MCP_URL:
-                    return
+                    return "FAILED"
                 if int(getattr(response, "status", 200)) not in {200, 202, 204}:
-                    return
-                response.read(MAXIMUM_JIN10_RESPONSE_BYTES + 1)
+                    return "FAILED"
+                body = response.read(MAXIMUM_JIN10_RESPONSE_BYTES + 1)
+                if not isinstance(body, bytes) or len(body) > MAXIMUM_JIN10_RESPONSE_BYTES:
+                    return "FAILED"
+                return "CONFIRMED"
         except Exception:
-            return
+            return "FAILED"
 
 
 @dataclass(frozen=True, slots=True)
@@ -734,6 +773,32 @@ def _tool_arguments(
     elif "limit" in required:
         return None
     return arguments
+
+
+def _initial_flash_arguments(
+    descriptor: Mapping[str, object],
+) -> dict[str, object] | None:
+    """Accept only Jin10's verified first-page ``list_flash`` schema."""
+
+    schema = descriptor.get("inputSchema")
+    if not isinstance(schema, Mapping) or schema.get("type") != "object":
+        return None
+    if schema.get("additionalProperties") is not False:
+        return None
+    raw_required = schema.get("required", ())
+    if not isinstance(raw_required, Sequence) or isinstance(
+        raw_required, (str, bytes, bytearray)
+    ):
+        return None
+    if tuple(raw_required):
+        return None
+    properties = schema.get("properties")
+    if not isinstance(properties, Mapping) or set(properties) != {"cursor"}:
+        return None
+    cursor_schema = properties.get("cursor")
+    if not isinstance(cursor_schema, Mapping) or cursor_schema.get("type") != "string":
+        return None
+    return {}
 
 
 def _empty_object_arguments(

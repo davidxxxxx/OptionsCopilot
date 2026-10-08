@@ -1,0 +1,60 @@
+{
+  "schema": "options-copilot.cloud-jin10-sanitized-acceptance.v1",
+  "status": "PASS",
+  "baseline_commit": "0cac427ad993d4b89ad43a721a6aa249df3aa440",
+  "library_v4_equivalence_claimed": false,
+  "deployed": false,
+  "program_chain": [
+    "Jin10EventProvider",
+    "NewsCoordinator.refresh_once",
+    "EvidenceStore",
+    "close_reopen_integrity_hash"
+  ],
+  "transport": {
+    "mode": "LIVE_DEFAULT",
+    "test_injection": false,
+    "endpoint": "https://mcp.jin10.com/mcp",
+    "tool": "list_flash",
+    "arguments": {},
+    "pages": 1,
+    "maximum_items": 20,
+    "end_to_end_timeout_seconds": 60
+  },
+  "provider_health": "READY",
+  "session_cleanup": {
+    "session_allocated": false,
+    "delete_attempted": false,
+    "result": "NOT_REQUIRED"
+  },
+  "store": {
+    "record_count": 20,
+    "coordinator_news_count": 10,
+    "reopened": true,
+    "integrity": "PASS",
+    "content_hash_count": 20,
+    "row_hash_count": 20
+  },
+  "time_evidence": {
+    "published_at_min": "2026-10-06T05:47:42Z",
+    "published_at_max": "2026-10-06T06:20:17Z",
+    "received_at": "2026-10-06T06:32:56.244729Z"
+  },
+  "coverage": {
+    "status": "BOUNDED_FIRST_PAGE_ONLY",
+    "complete_24h": false,
+    "next_cursor_followed": false
+  },
+  "authority": {
+    "decision_authority": "SUPPORTING_ONLY",
+    "production_eligible": false,
+    "approval_eligible": false,
+    "account_accessed": false,
+    "ibkr_accessed": false,
+    "order_creation_allowed": false,
+    "order_submission_allowed": false
+  },
+  "canonical_summary_sha256": "783de840fc034a00f6fac8611a9c044dcb1a33ea9a54de62642d02d5e3acca9c",
+  "raw_news_included": false,
+  "runtime_database_included": false,
+  "credential_or_session_value_included": false
+}
