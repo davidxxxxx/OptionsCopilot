@@ -1,0 +1,1010 @@
+{
+  "execution_baseline_commit": "7237246",
+  "manifest_kind": "options-copilot-standalone-phase-allowlist",
+  "phases": {
+    "01": {
+      "allowlist": [
+        ".planning/PROJECT.md",
+        ".planning/REQUIREMENTS.md",
+        ".planning/ROADMAP.md",
+        ".planning/STATE.md",
+        ".planning/config.json",
+        ".planning/phases/01-hermetic-standalone-foundation/01-01-PLAN.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-01-SUMMARY.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-02-PLAN.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-02-SUMMARY.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-03-PLAN.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-03-SUMMARY.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-04-PLAN.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-04-SUMMARY.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-CONTEXT.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-PATTERNS.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-RESEARCH.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-REVIEW-FIX.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-REVIEW.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-VALIDATION.md",
+        "AGENTS.md",
+        "README.md",
+        "options_copilot/operations/readiness.py",
+        "options_copilot/operations/standalone_phase_allowlists.json",
+        "options_copilot/operations/workspace_guard.py",
+        "requirements-dev.lock",
+        "requirements.lock",
+        "scripts/setup_options_copilot_env.ps1",
+        "scripts/start_options_copilot.ps1",
+        "scripts/verify_locked_environment.py",
+        "tests/options_copilot/test_bridge_coordinator.py",
+        "tests/options_copilot/test_dependency_lock.py",
+        "tests/options_copilot/test_launcher.py",
+        "tests/options_copilot/test_plan_allowlist_consistency.py",
+        "tests/options_copilot/test_readiness_cli.py",
+        "tests/options_copilot/test_workspace_guard.py"
+      ],
+      "authority_commit": "a20fc3488b63282248b7cc9b6748d56186ad1202",
+      "buckets": {
+        "audited_exceptions": [
+          "AGENTS.md",
+          "tests/options_copilot/test_bridge_coordinator.py"
+        ],
+        "declared_plan_files": [
+          "README.md",
+          "options_copilot/operations/readiness.py",
+          "options_copilot/operations/standalone_phase_allowlists.json",
+          "options_copilot/operations/workspace_guard.py",
+          "requirements-dev.lock",
+          "requirements.lock",
+          "scripts/setup_options_copilot_env.ps1",
+          "scripts/start_options_copilot.ps1",
+          "scripts/verify_locked_environment.py",
+          "tests/options_copilot/test_dependency_lock.py",
+          "tests/options_copilot/test_launcher.py",
+          "tests/options_copilot/test_plan_allowlist_consistency.py",
+          "tests/options_copilot/test_readiness_cli.py",
+          "tests/options_copilot/test_workspace_guard.py"
+        ],
+        "gsd_metadata": [
+          ".planning/PROJECT.md",
+          ".planning/REQUIREMENTS.md",
+          ".planning/ROADMAP.md",
+          ".planning/STATE.md",
+          ".planning/config.json",
+          ".planning/phases/01-hermetic-standalone-foundation/01-01-PLAN.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-01-SUMMARY.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-02-PLAN.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-02-SUMMARY.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-03-PLAN.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-03-SUMMARY.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-04-PLAN.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-04-SUMMARY.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-CONTEXT.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-PATTERNS.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-RESEARCH.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-REVIEW-FIX.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-REVIEW.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-VALIDATION.md"
+        ],
+        "ignored_evidence_prefixes": [],
+        "prior_phase_allowlist": [],
+        "supplemental_authority": []
+      },
+      "plans": [
+        {
+          "content_sha256": "3aac1947affb6e9ad77eec1fd53d17cacf2bf548fafe606df77752f31e5ccdc6",
+          "evidence_prefixes": [],
+          "files_modified": [
+            "README.md",
+            "requirements-dev.lock",
+            "requirements.lock",
+            "scripts/setup_options_copilot_env.ps1",
+            "scripts/verify_locked_environment.py",
+            "tests/options_copilot/test_dependency_lock.py"
+          ],
+          "plan_id": "01-01"
+        },
+        {
+          "content_sha256": "8bc03f161bb8ee8d261cf214dd28c82d73f98e29e9faaf4f5d5d38a379f76962",
+          "evidence_prefixes": [],
+          "files_modified": [
+            "options_copilot/operations/readiness.py",
+            "scripts/start_options_copilot.ps1",
+            "tests/options_copilot/test_launcher.py",
+            "tests/options_copilot/test_readiness_cli.py"
+          ],
+          "plan_id": "01-02"
+        },
+        {
+          "content_sha256": "0210cd0e6c7cf53aa0c5a83f5cc27a7ad261838b3ccc20cd0cb485c05c861981",
+          "evidence_prefixes": [],
+          "files_modified": [
+            "options_copilot/operations/standalone_phase_allowlists.json",
+            "options_copilot/operations/workspace_guard.py",
+            "tests/options_copilot/test_plan_allowlist_consistency.py",
+            "tests/options_copilot/test_workspace_guard.py"
+          ],
+          "plan_id": "01-03"
+        },
+        {
+          "content_sha256": "6b2a42c9667c190e7cd50b43fafc1eed67ca9f97cfc9168b1ef56eb906a29abf",
+          "evidence_prefixes": [],
+          "files_modified": [],
+          "plan_id": "01-04"
+        }
+      ],
+      "provenance": {
+        ".planning/PROJECT.md": [
+          "gsd_metadata"
+        ],
+        ".planning/REQUIREMENTS.md": [
+          "gsd_metadata"
+        ],
+        ".planning/ROADMAP.md": [
+          "gsd_metadata"
+        ],
+        ".planning/STATE.md": [
+          "gsd_metadata"
+        ],
+        ".planning/config.json": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-01-PLAN.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-01-SUMMARY.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-02-PLAN.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-02-SUMMARY.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-03-PLAN.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-03-SUMMARY.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-04-PLAN.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-04-SUMMARY.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-CONTEXT.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-PATTERNS.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-RESEARCH.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-REVIEW-FIX.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-REVIEW.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-VALIDATION.md": [
+          "gsd_metadata"
+        ],
+        "AGENTS.md": [
+          "audited_exceptions"
+        ],
+        "README.md": [
+          "declared_plan_files",
+          "plan:01-01"
+        ],
+        "options_copilot/operations/readiness.py": [
+          "declared_plan_files",
+          "plan:01-02"
+        ],
+        "options_copilot/operations/standalone_phase_allowlists.json": [
+          "declared_plan_files",
+          "plan:01-03"
+        ],
+        "options_copilot/operations/workspace_guard.py": [
+          "declared_plan_files",
+          "plan:01-03"
+        ],
+        "requirements-dev.lock": [
+          "declared_plan_files",
+          "plan:01-01"
+        ],
+        "requirements.lock": [
+          "declared_plan_files",
+          "plan:01-01"
+        ],
+        "scripts/setup_options_copilot_env.ps1": [
+          "declared_plan_files",
+          "plan:01-01"
+        ],
+        "scripts/start_options_copilot.ps1": [
+          "declared_plan_files",
+          "plan:01-02"
+        ],
+        "scripts/verify_locked_environment.py": [
+          "declared_plan_files",
+          "plan:01-01"
+        ],
+        "tests/options_copilot/test_bridge_coordinator.py": [
+          "audited_exceptions"
+        ],
+        "tests/options_copilot/test_dependency_lock.py": [
+          "declared_plan_files",
+          "plan:01-01"
+        ],
+        "tests/options_copilot/test_launcher.py": [
+          "declared_plan_files",
+          "plan:01-02"
+        ],
+        "tests/options_copilot/test_plan_allowlist_consistency.py": [
+          "declared_plan_files",
+          "plan:01-03"
+        ],
+        "tests/options_copilot/test_readiness_cli.py": [
+          "declared_plan_files",
+          "plan:01-02"
+        ],
+        "tests/options_copilot/test_workspace_guard.py": [
+          "declared_plan_files",
+          "plan:01-03"
+        ]
+      },
+      "supplemental_authority": null
+    },
+    "02": {
+      "allowlist": [
+        ".planning/PROJECT.md",
+        ".planning/REQUIREMENTS.md",
+        ".planning/ROADMAP.md",
+        ".planning/STATE.md",
+        ".planning/config.json",
+        ".planning/phases/01-hermetic-standalone-foundation/01-01-PLAN.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-01-SUMMARY.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-02-PLAN.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-02-SUMMARY.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-03-PLAN.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-03-SUMMARY.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-04-PLAN.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-04-SUMMARY.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-CONTEXT.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-PATTERNS.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-RESEARCH.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-REVIEW-FIX.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-REVIEW.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-VALIDATION.md",
+        ".planning/phases/01-hermetic-standalone-foundation/01-VERIFICATION.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-01-PLAN.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-01-SUMMARY.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-02-PLAN.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-02-SUMMARY.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-03-PLAN.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-03-SUMMARY.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-04-PLAN.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-04-SUMMARY.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-05-PLAN.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-05-SUMMARY.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-06-PLAN.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-06-SUMMARY.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-07-PLAN.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-07-SUMMARY.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-08-PLAN.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-08-SUMMARY.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-09-PLAN.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-09-SUMMARY.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-09-SUPPLEMENTAL-AUTHORITY.json",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-10-PLAN.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-10-SUMMARY.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-AI-SPEC.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-CONTEXT.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-PATTERNS.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-RESEARCH.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-REVIEW-FIX.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-REVIEW.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-VALIDATION.md",
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-VERIFICATION.md",
+        "AGENTS.md",
+        "README.md",
+        "data/options_copilot/evidence/phase-02/live/",
+        "options_copilot/api/app.py",
+        "options_copilot/llm/deepseek.py",
+        "options_copilot/news/__init__.py",
+        "options_copilot/news/advisory_adapter.py",
+        "options_copilot/news/advisory_models.py",
+        "options_copilot/news/composition.py",
+        "options_copilot/news/deepseek.py",
+        "options_copilot/news/reaction.py",
+        "options_copilot/news_runtime.py",
+        "options_copilot/operations/authority_audit.py",
+        "options_copilot/operations/phase2_security_controls.json",
+        "options_copilot/operations/phase2_security_gate.py",
+        "options_copilot/operations/readiness.py",
+        "options_copilot/operations/standalone_phase_allowlists.json",
+        "options_copilot/operations/workspace_guard.py",
+        "options_copilot/providers/__init__.py",
+        "options_copilot/providers/cli.py",
+        "options_copilot/providers/events.py",
+        "options_copilot/providers/official.py",
+        "options_copilot/providers/transport.py",
+        "options_copilot/runtime.py",
+        "requirements-dev.lock",
+        "requirements.lock",
+        "scripts/generate_phase2_eval_candidate.py",
+        "scripts/setup_options_copilot_env.ps1",
+        "scripts/start_options_copilot.ps1",
+        "scripts/verify_locked_environment.py",
+        "scripts/verify_phase2_live_checkpoint.py",
+        "scripts/verify_phase2_red_contracts.py",
+        "tests/options_copilot/fixtures/phase2_eval/candidate_v1/cases.json",
+        "tests/options_copilot/fixtures/phase2_eval/candidate_v1/manifest.json",
+        "tests/options_copilot/test_api_frontend.py",
+        "tests/options_copilot/test_authority_audit.py",
+        "tests/options_copilot/test_bridge_coordinator.py",
+        "tests/options_copilot/test_decision_pipeline.py",
+        "tests/options_copilot/test_dependency_lock.py",
+        "tests/options_copilot/test_event_providers.py",
+        "tests/options_copilot/test_launcher.py",
+        "tests/options_copilot/test_news_composition.py",
+        "tests/options_copilot/test_news_deepseek.py",
+        "tests/options_copilot/test_news_reaction.py",
+        "tests/options_copilot/test_news_runtime.py",
+        "tests/options_copilot/test_news_shadow_research.py",
+        "tests/options_copilot/test_phase2_advisory_adapter.py",
+        "tests/options_copilot/test_phase2_live_checkpoint_validator.py",
+        "tests/options_copilot/test_phase2_red_verifier.py",
+        "tests/options_copilot/test_phase2_security_gate.py",
+        "tests/options_copilot/test_phase2_transport_contracts.py",
+        "tests/options_copilot/test_plan_allowlist_consistency.py",
+        "tests/options_copilot/test_readiness_cli.py",
+        "tests/options_copilot/test_runtime_pipeline.py",
+        "tests/options_copilot/test_runtime_public_event_providers.py",
+        "tests/options_copilot/test_workspace_guard.py"
+      ],
+      "authority_commit": "cc4089c9d5e02a1ff13a8b3df35b2565e0d15f45",
+      "buckets": {
+        "audited_exceptions": [],
+        "declared_plan_files": [
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-VALIDATION.md",
+          "data/options_copilot/evidence/phase-02/live/",
+          "options_copilot/api/app.py",
+          "options_copilot/llm/deepseek.py",
+          "options_copilot/news/__init__.py",
+          "options_copilot/news/advisory_adapter.py",
+          "options_copilot/news/advisory_models.py",
+          "options_copilot/news/composition.py",
+          "options_copilot/news/deepseek.py",
+          "options_copilot/news/reaction.py",
+          "options_copilot/news_runtime.py",
+          "options_copilot/operations/phase2_security_controls.json",
+          "options_copilot/operations/phase2_security_gate.py",
+          "options_copilot/operations/standalone_phase_allowlists.json",
+          "options_copilot/operations/workspace_guard.py",
+          "options_copilot/providers/__init__.py",
+          "options_copilot/providers/cli.py",
+          "options_copilot/providers/events.py",
+          "options_copilot/providers/official.py",
+          "options_copilot/providers/transport.py",
+          "options_copilot/runtime.py",
+          "scripts/generate_phase2_eval_candidate.py",
+          "scripts/verify_phase2_live_checkpoint.py",
+          "scripts/verify_phase2_red_contracts.py",
+          "tests/options_copilot/fixtures/phase2_eval/candidate_v1/cases.json",
+          "tests/options_copilot/fixtures/phase2_eval/candidate_v1/manifest.json",
+          "tests/options_copilot/test_api_frontend.py",
+          "tests/options_copilot/test_decision_pipeline.py",
+          "tests/options_copilot/test_event_providers.py",
+          "tests/options_copilot/test_news_composition.py",
+          "tests/options_copilot/test_news_deepseek.py",
+          "tests/options_copilot/test_news_reaction.py",
+          "tests/options_copilot/test_news_runtime.py",
+          "tests/options_copilot/test_news_shadow_research.py",
+          "tests/options_copilot/test_phase2_advisory_adapter.py",
+          "tests/options_copilot/test_phase2_live_checkpoint_validator.py",
+          "tests/options_copilot/test_phase2_red_verifier.py",
+          "tests/options_copilot/test_phase2_security_gate.py",
+          "tests/options_copilot/test_phase2_transport_contracts.py",
+          "tests/options_copilot/test_plan_allowlist_consistency.py",
+          "tests/options_copilot/test_runtime_pipeline.py",
+          "tests/options_copilot/test_runtime_public_event_providers.py",
+          "tests/options_copilot/test_workspace_guard.py"
+        ],
+        "gsd_metadata": [
+          ".planning/phases/01-hermetic-standalone-foundation/01-VERIFICATION.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-01-PLAN.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-01-SUMMARY.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-02-PLAN.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-02-SUMMARY.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-03-PLAN.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-03-SUMMARY.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-04-PLAN.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-04-SUMMARY.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-05-PLAN.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-05-SUMMARY.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-06-PLAN.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-06-SUMMARY.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-07-PLAN.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-07-SUMMARY.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-08-PLAN.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-08-SUMMARY.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-09-PLAN.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-09-SUMMARY.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-10-PLAN.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-10-SUMMARY.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-AI-SPEC.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-CONTEXT.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-PATTERNS.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-RESEARCH.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-REVIEW-FIX.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-REVIEW.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-VALIDATION.md",
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-VERIFICATION.md"
+        ],
+        "ignored_evidence_prefixes": [
+          "data/options_copilot/evidence/phase-02/live/"
+        ],
+        "prior_phase_allowlist": [
+          ".planning/PROJECT.md",
+          ".planning/REQUIREMENTS.md",
+          ".planning/ROADMAP.md",
+          ".planning/STATE.md",
+          ".planning/config.json",
+          ".planning/phases/01-hermetic-standalone-foundation/01-01-PLAN.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-01-SUMMARY.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-02-PLAN.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-02-SUMMARY.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-03-PLAN.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-03-SUMMARY.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-04-PLAN.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-04-SUMMARY.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-CONTEXT.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-PATTERNS.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-RESEARCH.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-REVIEW-FIX.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-REVIEW.md",
+          ".planning/phases/01-hermetic-standalone-foundation/01-VALIDATION.md",
+          "AGENTS.md",
+          "README.md",
+          "options_copilot/operations/readiness.py",
+          "options_copilot/operations/standalone_phase_allowlists.json",
+          "options_copilot/operations/workspace_guard.py",
+          "requirements-dev.lock",
+          "requirements.lock",
+          "scripts/setup_options_copilot_env.ps1",
+          "scripts/start_options_copilot.ps1",
+          "scripts/verify_locked_environment.py",
+          "tests/options_copilot/test_bridge_coordinator.py",
+          "tests/options_copilot/test_dependency_lock.py",
+          "tests/options_copilot/test_launcher.py",
+          "tests/options_copilot/test_plan_allowlist_consistency.py",
+          "tests/options_copilot/test_readiness_cli.py",
+          "tests/options_copilot/test_workspace_guard.py"
+        ],
+        "supplemental_authority": [
+          ".planning/phases/02-advisory-api-and-secondary-evidence/02-09-SUPPLEMENTAL-AUTHORITY.json",
+          "options_copilot/operations/authority_audit.py",
+          "tests/options_copilot/test_authority_audit.py"
+        ]
+      },
+      "plans": [
+        {
+          "content_sha256": "9a5663ef275d930c1f896c0b578b6c3721efa3f15cab09ceb90a73c819f1e01d",
+          "evidence_prefixes": [],
+          "files_modified": [
+            "scripts/generate_phase2_eval_candidate.py",
+            "tests/options_copilot/fixtures/phase2_eval/candidate_v1/cases.json",
+            "tests/options_copilot/fixtures/phase2_eval/candidate_v1/manifest.json",
+            "tests/options_copilot/test_decision_pipeline.py",
+            "tests/options_copilot/test_news_shadow_research.py",
+            "tests/options_copilot/test_phase2_advisory_adapter.py",
+            "tests/options_copilot/test_runtime_pipeline.py"
+          ],
+          "plan_id": "02-01"
+        },
+        {
+          "content_sha256": "7ec439888d7d1d49e6bc84fe8a44e211f2e03fe56d700ce30c73df6b0a96c1b3",
+          "evidence_prefixes": [],
+          "files_modified": [
+            "tests/options_copilot/test_news_composition.py",
+            "tests/options_copilot/test_news_deepseek.py",
+            "tests/options_copilot/test_phase2_transport_contracts.py"
+          ],
+          "plan_id": "02-02"
+        },
+        {
+          "content_sha256": "e8ee49b0d4547a7192ac2759d537d9e961b2358adb7de077bdeb3d7eedde3afe",
+          "evidence_prefixes": [],
+          "files_modified": [
+            "tests/options_copilot/test_api_frontend.py",
+            "tests/options_copilot/test_event_providers.py",
+            "tests/options_copilot/test_news_reaction.py",
+            "tests/options_copilot/test_news_runtime.py",
+            "tests/options_copilot/test_runtime_public_event_providers.py"
+          ],
+          "plan_id": "02-03"
+        },
+        {
+          "content_sha256": "593fe5840a5353e4a866e4035869205d0385122e07f26384b43645ed0f87e053",
+          "evidence_prefixes": [],
+          "files_modified": [
+            "options_copilot/news/__init__.py",
+            "options_copilot/news/advisory_adapter.py",
+            "options_copilot/news/advisory_models.py",
+            "options_copilot/news/composition.py",
+            "options_copilot/news/deepseek.py"
+          ],
+          "plan_id": "02-04"
+        },
+        {
+          "content_sha256": "e9ccbab32a90143cacd2a3e9ea7778b34651f86024376f90e80eb9fef619c49c",
+          "evidence_prefixes": [],
+          "files_modified": [
+            "options_copilot/llm/deepseek.py",
+            "options_copilot/providers/transport.py"
+          ],
+          "plan_id": "02-05"
+        },
+        {
+          "content_sha256": "1a4d53bdb1291ff16aa5ee5e111cd55a4a423ef223963c302eafd8c4bb1a01b5",
+          "evidence_prefixes": [],
+          "files_modified": [
+            "options_copilot/news/reaction.py",
+            "options_copilot/providers/__init__.py",
+            "options_copilot/providers/events.py",
+            "options_copilot/providers/official.py"
+          ],
+          "plan_id": "02-06"
+        },
+        {
+          "content_sha256": "edba2688ec7e3f44e7a5becee87692df7b7bb6927597f99f47dd68465b76fb48",
+          "evidence_prefixes": [],
+          "files_modified": [
+            "options_copilot/api/app.py",
+            "options_copilot/news_runtime.py",
+            "options_copilot/runtime.py"
+          ],
+          "plan_id": "02-07"
+        },
+        {
+          "content_sha256": "5863f00f11de2c33cfe5b446698db8bca9f06fde5f1a3a4b6a92d7410cbb2e16",
+          "evidence_prefixes": [],
+          "files_modified": [
+            "options_copilot/providers/cli.py"
+          ],
+          "plan_id": "02-08"
+        },
+        {
+          "content_sha256": "07f3aee53b0b5e1fa41745144ba0b93bb49764df07def66697a3aaf09ef108ee",
+          "evidence_prefixes": [
+            "data/options_copilot/evidence/phase-02/live/"
+          ],
+          "files_modified": [
+            ".planning/phases/02-advisory-api-and-secondary-evidence/02-VALIDATION.md",
+            "data/options_copilot/evidence/phase-02/live/",
+            "scripts/verify_phase2_live_checkpoint.py",
+            "tests/options_copilot/test_phase2_live_checkpoint_validator.py"
+          ],
+          "plan_id": "02-09"
+        },
+        {
+          "content_sha256": "d3fe858d9985179ddbc99067da23798a3dbcc086ef291033eccdcf4c76c9b93b",
+          "evidence_prefixes": [],
+          "files_modified": [
+            "options_copilot/operations/phase2_security_controls.json",
+            "options_copilot/operations/phase2_security_gate.py",
+            "options_copilot/operations/standalone_phase_allowlists.json",
+            "options_copilot/operations/workspace_guard.py",
+            "scripts/verify_phase2_red_contracts.py",
+            "tests/options_copilot/test_phase2_red_verifier.py",
+            "tests/options_copilot/test_phase2_security_gate.py",
+            "tests/options_copilot/test_plan_allowlist_consistency.py",
+            "tests/options_copilot/test_workspace_guard.py"
+          ],
+          "plan_id": "02-10"
+        }
+      ],
+      "provenance": {
+        ".planning/PROJECT.md": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/REQUIREMENTS.md": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/ROADMAP.md": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/STATE.md": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/config.json": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-01-PLAN.md": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-01-SUMMARY.md": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-02-PLAN.md": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-02-SUMMARY.md": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-03-PLAN.md": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-03-SUMMARY.md": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-04-PLAN.md": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-04-SUMMARY.md": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-CONTEXT.md": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-PATTERNS.md": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-RESEARCH.md": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-REVIEW-FIX.md": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-REVIEW.md": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-VALIDATION.md": [
+          "prior_phase_allowlist"
+        ],
+        ".planning/phases/01-hermetic-standalone-foundation/01-VERIFICATION.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-01-PLAN.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-01-SUMMARY.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-02-PLAN.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-02-SUMMARY.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-03-PLAN.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-03-SUMMARY.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-04-PLAN.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-04-SUMMARY.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-05-PLAN.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-05-SUMMARY.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-06-PLAN.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-06-SUMMARY.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-07-PLAN.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-07-SUMMARY.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-08-PLAN.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-08-SUMMARY.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-09-PLAN.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-09-SUMMARY.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-09-SUPPLEMENTAL-AUTHORITY.json": [
+          "supplemental_authority"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-10-PLAN.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-10-SUMMARY.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-AI-SPEC.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-CONTEXT.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-PATTERNS.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-RESEARCH.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-REVIEW-FIX.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-REVIEW.md": [
+          "gsd_metadata"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-VALIDATION.md": [
+          "declared_plan_files",
+          "gsd_metadata",
+          "plan:02-09"
+        ],
+        ".planning/phases/02-advisory-api-and-secondary-evidence/02-VERIFICATION.md": [
+          "gsd_metadata"
+        ],
+        "AGENTS.md": [
+          "prior_phase_allowlist"
+        ],
+        "README.md": [
+          "prior_phase_allowlist"
+        ],
+        "data/options_copilot/evidence/phase-02/live/": [
+          "declared_plan_files",
+          "ignored_evidence_prefixes",
+          "plan:02-09"
+        ],
+        "options_copilot/api/app.py": [
+          "declared_plan_files",
+          "plan:02-07"
+        ],
+        "options_copilot/llm/deepseek.py": [
+          "declared_plan_files",
+          "plan:02-05"
+        ],
+        "options_copilot/news/__init__.py": [
+          "declared_plan_files",
+          "plan:02-04"
+        ],
+        "options_copilot/news/advisory_adapter.py": [
+          "declared_plan_files",
+          "plan:02-04"
+        ],
+        "options_copilot/news/advisory_models.py": [
+          "declared_plan_files",
+          "plan:02-04"
+        ],
+        "options_copilot/news/composition.py": [
+          "declared_plan_files",
+          "plan:02-04"
+        ],
+        "options_copilot/news/deepseek.py": [
+          "declared_plan_files",
+          "plan:02-04"
+        ],
+        "options_copilot/news/reaction.py": [
+          "declared_plan_files",
+          "plan:02-06"
+        ],
+        "options_copilot/news_runtime.py": [
+          "declared_plan_files",
+          "plan:02-07"
+        ],
+        "options_copilot/operations/authority_audit.py": [
+          "supplemental_authority"
+        ],
+        "options_copilot/operations/phase2_security_controls.json": [
+          "declared_plan_files",
+          "plan:02-10"
+        ],
+        "options_copilot/operations/phase2_security_gate.py": [
+          "declared_plan_files",
+          "plan:02-10"
+        ],
+        "options_copilot/operations/readiness.py": [
+          "prior_phase_allowlist"
+        ],
+        "options_copilot/operations/standalone_phase_allowlists.json": [
+          "declared_plan_files",
+          "plan:02-10",
+          "prior_phase_allowlist"
+        ],
+        "options_copilot/operations/workspace_guard.py": [
+          "declared_plan_files",
+          "plan:02-10",
+          "prior_phase_allowlist"
+        ],
+        "options_copilot/providers/__init__.py": [
+          "declared_plan_files",
+          "plan:02-06"
+        ],
+        "options_copilot/providers/cli.py": [
+          "declared_plan_files",
+          "plan:02-08"
+        ],
+        "options_copilot/providers/events.py": [
+          "declared_plan_files",
+          "plan:02-06"
+        ],
+        "options_copilot/providers/official.py": [
+          "declared_plan_files",
+          "plan:02-06"
+        ],
+        "options_copilot/providers/transport.py": [
+          "declared_plan_files",
+          "plan:02-05"
+        ],
+        "options_copilot/runtime.py": [
+          "declared_plan_files",
+          "plan:02-07"
+        ],
+        "requirements-dev.lock": [
+          "prior_phase_allowlist"
+        ],
+        "requirements.lock": [
+          "prior_phase_allowlist"
+        ],
+        "scripts/generate_phase2_eval_candidate.py": [
+          "declared_plan_files",
+          "plan:02-01"
+        ],
+        "scripts/setup_options_copilot_env.ps1": [
+          "prior_phase_allowlist"
+        ],
+        "scripts/start_options_copilot.ps1": [
+          "prior_phase_allowlist"
+        ],
+        "scripts/verify_locked_environment.py": [
+          "prior_phase_allowlist"
+        ],
+        "scripts/verify_phase2_live_checkpoint.py": [
+          "declared_plan_files",
+          "plan:02-09"
+        ],
+        "scripts/verify_phase2_red_contracts.py": [
+          "declared_plan_files",
+          "plan:02-10"
+        ],
+        "tests/options_copilot/fixtures/phase2_eval/candidate_v1/cases.json": [
+          "declared_plan_files",
+          "plan:02-01"
+        ],
+        "tests/options_copilot/fixtures/phase2_eval/candidate_v1/manifest.json": [
+          "declared_plan_files",
+          "plan:02-01"
+        ],
+        "tests/options_copilot/test_api_frontend.py": [
+          "declared_plan_files",
+          "plan:02-03"
+        ],
+        "tests/options_copilot/test_authority_audit.py": [
+          "supplemental_authority"
+        ],
+        "tests/options_copilot/test_bridge_coordinator.py": [
+          "prior_phase_allowlist"
+        ],
+        "tests/options_copilot/test_decision_pipeline.py": [
+          "declared_plan_files",
+          "plan:02-01"
+        ],
+        "tests/options_copilot/test_dependency_lock.py": [
+          "prior_phase_allowlist"
+        ],
+        "tests/options_copilot/test_event_providers.py": [
+          "declared_plan_files",
+          "plan:02-03"
+        ],
+        "tests/options_copilot/test_launcher.py": [
+          "prior_phase_allowlist"
+        ],
+        "tests/options_copilot/test_news_composition.py": [
+          "declared_plan_files",
+          "plan:02-02"
+        ],
+        "tests/options_copilot/test_news_deepseek.py": [
+          "declared_plan_files",
+          "plan:02-02"
+        ],
+        "tests/options_copilot/test_news_reaction.py": [
+          "declared_plan_files",
+          "plan:02-03"
+        ],
+        "tests/options_copilot/test_news_runtime.py": [
+          "declared_plan_files",
+          "plan:02-03"
+        ],
+        "tests/options_copilot/test_news_shadow_research.py": [
+          "declared_plan_files",
+          "plan:02-01"
+        ],
+        "tests/options_copilot/test_phase2_advisory_adapter.py": [
+          "declared_plan_files",
+          "plan:02-01"
+        ],
+        "tests/options_copilot/test_phase2_live_checkpoint_validator.py": [
+          "declared_plan_files",
+          "plan:02-09"
+        ],
+        "tests/options_copilot/test_phase2_red_verifier.py": [
+          "declared_plan_files",
+          "plan:02-10"
+        ],
+        "tests/options_copilot/test_phase2_security_gate.py": [
+          "declared_plan_files",
+          "plan:02-10"
+        ],
+        "tests/options_copilot/test_phase2_transport_contracts.py": [
+          "declared_plan_files",
+          "plan:02-02"
+        ],
+        "tests/options_copilot/test_plan_allowlist_consistency.py": [
+          "declared_plan_files",
+          "plan:02-10",
+          "prior_phase_allowlist"
+        ],
+        "tests/options_copilot/test_readiness_cli.py": [
+          "prior_phase_allowlist"
+        ],
+        "tests/options_copilot/test_runtime_pipeline.py": [
+          "declared_plan_files",
+          "plan:02-01"
+        ],
+        "tests/options_copilot/test_runtime_public_event_providers.py": [
+          "declared_plan_files",
+          "plan:02-03"
+        ],
+        "tests/options_copilot/test_workspace_guard.py": [
+          "declared_plan_files",
+          "plan:02-10",
+          "prior_phase_allowlist"
+        ]
+      },
+      "supplemental_authority": {
+        "anchor_blob_sha256": {
+          "options_copilot/operations/authority_audit.py": "7ba27de877d2cdd31bf050e916648dc00507c393dca0d26af516432a52bfdf5b",
+          "tests/options_copilot/test_authority_audit.py": "60cff798f4171d772f0157ef093c4d2a609e479818b52167c84c6b294b2212a2"
+        },
+        "authority_commit": "1b0b6c98f19d5a5528f401374d4ebfbf8df78297",
+        "authorized_paths": [
+          "options_copilot/operations/authority_audit.py",
+          "tests/options_copilot/test_authority_audit.py"
+        ],
+        "content_sha256": {
+          "options_copilot/operations/authority_audit.py": "e29055b626c0f80e2b943cf51a970b02c1ba443ce584bbf056993d736d757d2b",
+          "tests/options_copilot/test_authority_audit.py": "360577934dce5fea88b7957e3378839b0fe1a5c8ff9ea5d8e7b7fbbb63316213"
+        },
+        "execution_baseline_commit": "72372464e99dda342af5934bb8641900970dc013",
+        "kind": "options_copilot.phase2_supplemental_plan_authority.v1",
+        "parent_plan_authority_commit": "cc4089c9d5e02a1ff13a8b3df35b2565e0d15f45",
+        "phase": "02",
+        "plan": "02-09",
+        "reason": "Rule 3 release-gate repair for repository-root production authority audit scoping",
+        "record_path": ".planning/phases/02-advisory-api-and-secondary-evidence/02-09-SUPPLEMENTAL-AUTHORITY.json",
+        "record_sha256": "82621b7ab6fc039ef63cc6ee27b9e720ddce430a80d80c4d3a0a50d8802b1532",
+        "scan_contract": {
+          "excluded_nonproduction_roots": [
+            ".venv/",
+            "migration_backups/",
+            "tests/"
+          ],
+          "production_roots": [
+            "options_copilot/",
+            "scripts/"
+          ]
+        },
+        "schema_version": 1
+      }
+    }
+  },
+  "schema_version": 3
+}

@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>期权副驾 OptionsCopilot</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>期权副驾</h1>
+      <span class="sub">新闻 → 观点 → IBKR 期权 → 每日排名（只读，不下单）</span>
+    </div>
+    <div class="clock" id="clock">—</div>
+    <div class="chips" id="chips"></div>
+    <button id="run-button" type="button">立即运行</button>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button type="button" data-tab="ideas" class="active">今日推荐</button>
+    <button type="button" data-tab="views">观点</button>
+    <button type="button" data-tab="news">新闻</button>
+    <button type="button" data-tab="earnings">财报日历</button>
+    <button type="button" data-tab="positions">持仓</button>
+    <button type="button" data-tab="tracking">复盘</button>
+    <button type="button" data-tab="runs">运行记录</button>
+  </nav>
+
+  <main>
+    <section id="tab-ideas" class="tab active">
+      <div class="card" id="run-card">
+        <div class="card-head">
+          <h2>最近一次运行</h2>
+          <span id="run-meta" class="muted">—</span>
+        </div>
+        <div id="stage-list" class="stages"></div>
+        <p id="run-error" class="error hidden"></p>
+        <ul id="position-alerts" class="alerts hidden"></ul>
+      </div>
+      <div class="card">
+        <h2>宏观与市场主线</h2>
+        <p id="macro" class="macro muted">暂无</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Top 10 期权组合</h2>
+          <span class="muted">按“期望优势 / 最大亏损”排序；期望优势 = 你的观点相对市场定价的优势，已扣滑点和手续费；点击行查看细节</span>
+        </div>
+        <div class="table-wrap">
+          <table id="ideas-table">
+            <thead><tr>
+              <th>#</th><th>状态</th><th>标的</th><th>观点</th><th>结构</th><th>到期</th><th>组合</th>
+              <th class="num">净权利金</th><th class="num">最大亏损</th><th class="num">最大盈利</th>
+              <th class="num">盈亏比</th><th>盈亏平衡</th><th class="num">胜率 观点/市场</th>
+              <th class="num">期望优势</th><th class="num">建议张数</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="ideas-empty" class="muted hidden"></p>
+        <div id="ideas-dropped" class="dropped hidden"></div>
+        <div id="idea-detail" class="detail hidden"></div>
+      </div>
+    </section>
+
+    <section id="tab-views" class="tab">
+      <div class="card">
+        <div class="card-head">
+          <h2>观点账本</h2>
+          <span class="muted">由已分类新闻按固定规则计算：证据分 = Σ 方向 × 力度 × 重要性 × 时间衰减；超过阈值才建立观点，跌破更低阈值才结束</span>
+        </div>
+        <div class="table-wrap">
+          <table id="views-table">
+            <thead><tr>
+              <th>标的</th><th>方向</th><th>信心</th><th class="num">证据分</th><th class="num">波动分</th>
+              <th class="num">预期偏移</th><th class="num">周期(天)</th><th>波动</th><th>催化剂</th>
+              <th>建立于</th><th>主要依据</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="views-empty" class="muted hidden">暂无观点：还没有足够的已分类新闻证据。</p>
+      </div>
+      <div class="card">
+        <h2>观点变化记录</h2>
+        <div class="table-wrap">
+          <table id="view-changes-table">
+            <thead><tr><th>时间</th><th>标的</th><th>变化</th><th>之前 → 之后</th><th>触发的新闻</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>市场状态（由 CBOE 期权链计算，每日留存；暂不参与排序）</h2>
+          <span class="muted">自有 IV 分位至少需要 20 个交易日样本</span>
+        </div>
+        <div class="table-wrap">
+          <table id="market-state-table">
+            <thead><tr>
+              <th>标的</th><th class="num">现价</th><th class="num">IV30</th><th class="num">IV90</th>
+              <th class="num">期限斜率</th><th class="num">25Δ偏斜</th><th class="num">25Δ蝶式</th>
+              <th class="num">IV−HV20</th><th class="num">GEX</th><th class="num">认沽/认购持仓比</th>
+              <th class="num">自有 IV 分位</th><th>更新时间</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="market-state-empty" class="muted hidden">暂无市场状态记录。</p>
+      </div>
+    </section>
+
+    <section id="tab-news" class="tab">
+      <div class="card">
+        <div class="card-head">
+          <h2>新闻流（24 小时）</h2>
+          <div class="filters">
+            <select id="news-source">
+              <option value="">全部来源</option>
+              <option value="jin10">金十</option>
+              <option value="finnhub">Finnhub</option>
+            </select>
+            <select id="news-importance">
+              <option value="0">全部重要性</option>
+              <option value="1">重要性 ≥ 1</option>
+              <option value="2" selected>重要性 ≥ 2</option>
+              <option value="3">只看 3（重大）</option>
+            </select>
+            <select id="news-category"><option value="">全部类别</option></select>
+            <input id="news-symbol" type="text" placeholder="标的，如 NVDA" maxlength="5">
+          </div>
+        </div>
+        <ul id="news-list" class="news"></ul>
+      </div>
+    </section>
+
+    <section id="tab-earnings" class="tab">
+      <div class="card">
+        <h2>未来 10 天财报（自选池内）</h2>
+        <div class="table-wrap">
+          <table id="earnings-table">
+            <thead><tr><th>日期</th><th>标的</th><th>时段</th><th class="num">EPS 预期</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-positions" class="tab">
+      <div class="card">
+        <div class="card-head">
+          <h2>持仓风险与提醒</h2>
+          <span id="risk-meta" class="muted">—</span>
+        </div>
+        <div class="table-wrap">
+          <table id="groups-table">
+            <thead><tr>
+              <th>标的</th><th>组合腿</th><th>到期</th><th class="num">成本</th><th class="num">现值</th>
+              <th class="num">盈亏</th><th class="num">最大亏损</th><th class="num">最大盈利</th><th>提醒</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="groups-empty" class="muted hidden">没有期权持仓。</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>账户与持仓（原始）</h2>
+          <span id="account-meta" class="muted">来自最近一次连上 IBKR 的运行</span>
+        </div>
+        <div class="table-wrap">
+          <table id="positions-table">
+            <thead><tr><th>合约</th><th>类型</th><th class="num">数量</th><th class="num">平均成本</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-tracking" class="tab">
+      <div class="card">
+        <div class="card-head">
+          <h2>推荐复盘（纸面跟踪）</h2>
+          <span class="muted">每个首次进入推荐列表的组合（包括你没下单的）按当时估算成交价记 1 组，之后每次运行用 CBOE 报价重新估值，按规则模拟平仓：止盈/止损阈值同持仓提醒；入场时距到期超过 7 天的在剩 7 天时平仓，否则持有到期。这是纸面结果，不是实盘，不含提前指派等情况。</span>
+        </div>
+        <div id="tracking-summary" class="stages"></div>
+        <p id="tracking-sample" class="muted"></p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>分组表现</h2>
+          <select id="tracking-group">
+            <option value="by_origin">来源</option>
+            <option value="by_structure">结构</option>
+            <option value="by_edge_bucket">期望优势区间</option>
+            <option value="by_conviction">信心</option>
+            <option value="by_params_version">参数版本</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table id="tracking-groups-table">
+            <thead><tr><th>分组</th><th class="num">笔数</th><th class="num">胜率</th><th class="num">累计盈亏</th><th class="num">收益风险比</th><th class="num">预测优势率</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>跟踪记录</h2>
+          <select id="tracking-status">
+            <option value="all">全部</option>
+            <option value="open">持有中</option>
+            <option value="closed">已平仓</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table id="tracking-table">
+            <thead><tr>
+              <th>入选时间</th><th>标的</th><th>结构</th><th>组合</th><th>来源</th>
+              <th class="num">入场净权利金</th><th class="num">最大亏损</th><th class="num">预测优势率</th>
+              <th class="num">盈亏（当前或平仓）</th><th class="num">收益/风险</th><th>状态</th><th>参数版本</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="tracking-empty" class="muted hidden">暂无跟踪记录。</p>
+        <div id="tracking-detail" class="detail hidden"></div>
+      </div>
+    </section>
+
+    <section id="tab-runs" class="tab">
+      <div class="card">
+        <h2>运行记录</h2>
+        <div class="table-wrap">
+          <table id="runs-table">
+            <thead><tr>
+              <th>ID</th><th>交易日</th><th>时段</th><th>触发</th><th>状态</th>
+              <th>IBKR</th><th>观点</th><th class="num">推荐数</th><th>开始</th><th>错误</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer muted">
+    研究工具，不构成投资建议；系统只读 IBKR，永不下单。下单前请在 TWS 中核对实时报价。
+  </footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>

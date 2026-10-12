@@ -1,0 +1,217 @@
+{
+  "actor": "human:xujie",
+  "contract_hash": "d5922fa9808c4f1e7150362026037d17fb550d6f64daf8f86985042053e5428b",
+  "contract_kind": "EXECUTION_COST",
+  "effective_at": "2026-08-03T16:05:00.316359+00:00",
+  "payload": {
+    "application_scope": {
+      "existing_position_management": "charge only future exit, cleanup, exercise, assignment, and settlement costs; never charge historical entry cost twice",
+      "new_entry_candidate": "reserve the full conservative round trip at candidate creation, including entry and planned exit",
+      "replay_and_outcomes": "apply the contract version effective at each decision time and retain the bound version and hash"
+    },
+    "assignment_exercise_and_dividend": {
+      "assignment": {
+        "broker_fee_usd_per_contract": "0.00",
+        "fallback_when_risk_cannot_be_bounded": "NO_TRADE",
+        "planned_assignment_allowed": false,
+        "unexpected_assignment_action": [
+          "BLOCK_NEW_COMBINATIONS",
+          "REFRESH_AUTHORITATIVE_BROKER_SNAPSHOT",
+          "RECONCILE_POSITION_AND_WORKING_ORDERS",
+          "REQUIRE_HUMAN_MANAGEMENT_APPROVAL"
+        ]
+      },
+      "early_exercise": {
+        "long_option_plan": "CLOSE_POSITION; NEVER_ASSUME_EXERCISE",
+        "missing_extrinsic_or_calendar_data": "NO_TRADE",
+        "short_call_trigger": "when ex-dividend is within 2 trading days, the call is in the money, and remaining extrinsic value is less than or equal to dividend_per_share + 0.05 USD",
+        "short_put_trigger": "when the put is in the money and remaining extrinsic value is less than or equal to 0.05 USD",
+        "trigger_action": "BLOCK_ENTRY_OR_REQUIRE_POSITION_REDUCTION_BEFORE_THE_RISK_WINDOW"
+      },
+      "ex_dividend": {
+        "authoritative_calendar_required": true,
+        "conflicted_or_missing_calendar": "NO_TRADE",
+        "covered_horizon": "through maximum_holding_date plus 2 trading days",
+        "short_call_risk_rule": "apply the early-exercise trigger and exit before the ex-dividend cutoff"
+      },
+      "exercise": {
+        "broker_fee_usd_per_contract": "0.00",
+        "creator_authority": "NONE",
+        "fallback_when_settlement_exposure_is_unknown": "NO_TRADE",
+        "planned_exercise_allowed": false
+      },
+      "short_leg_exit_deadline": "15:30 America/New_York on the trading day that is 2 trading days before expiration",
+      "unknown_expiration_calendar": "NO_TRADE"
+    },
+    "calibration": {
+      "account_pricing_plan": "UNKNOWN_FIXED_TIERED_OR_LITE",
+      "method": "HYBRID_REAL_ACCOUNT_HISTORY_OFFICIAL_SCHEDULE_AND_CONSERVATIVE_FALLBACK",
+      "observed_at": "2026-08-03T16:05:00.3163596Z",
+      "observed_commission_usd": {
+        "maximum_per_contract_side": "1.04028",
+        "minimum_per_contract_side": "0.33947",
+        "total": "7.7695764",
+        "weighted_mean_per_contract_side": "0.6474647"
+      },
+      "sample_counts": {
+        "completed_round_trip_strategy_lifecycles": 1,
+        "contract_sides": 12,
+        "fill_records": 9,
+        "grouped_execution_events": 3
+      },
+      "sample_ids": [
+        "IBKR-YTD-20260727-WDC-ENTRY",
+        "IBKR-YTD-20260729-WDC-EXIT",
+        "IBKR-YTD-20260730-GLD-ENTRY"
+      ],
+      "status": "LIMITED_SAMPLE_CONSERVATIVE",
+      "unobservable_from_history": [
+        "contemporaneous NBBO",
+        "true spread capture",
+        "slippage versus arrival price",
+        "exact exchange and regulatory fee decomposition",
+        "assignment tail cost",
+        "early-exercise tail cost"
+      ]
+    },
+    "commission_and_fees": {
+      "broker_complete_estimate_policy": "when a fresh complete broker estimate is available, use the greater of that estimate and the fallback",
+      "components_covered": [
+        "IBKR commission",
+        "exchange fee",
+        "clearing fee",
+        "regulatory fee",
+        "transaction fee",
+        "routing surcharge"
+      ],
+      "fallback_formula_per_order": "max(1.00 USD, 1.25 USD * contract_sides_in_order)",
+      "fallback_usd_per_contract_side": "1.25",
+      "minimum_usd_per_order": "1.00",
+      "missing_or_partial_broker_estimate": "USE_FALLBACK",
+      "negative_fee_or_rebate_credit_allowed": false,
+      "round_trip_formula": "entry_order_fee + planned_exit_order_fee",
+      "round_trip_reserved_at_candidate_creation": true
+    },
+    "consumer_gates": {
+      "contract_missing_invalid_unsigned_or_not_effective": "NO_CANDIDATE_AND_NO_APPROVAL",
+      "cost_input_missing_or_nonfinite": "NO_TRADE",
+      "fallback_missing_or_unsigned": "NO_CANDIDATE_AND_NO_APPROVAL",
+      "hash_or_version_mismatch": "NO_CANDIDATE_AND_NO_APPROVAL",
+      "normal_and_stress_ev_rule": "normal after-cost expected value must exceed the signed policy threshold and stress after-cost expected value must be nonnegative"
+    },
+    "contract_id": "execution-cost.v1",
+    "correction_policy": {
+      "automatic_recalibration": false,
+      "delete_prior": false,
+      "mode": "APPEND_ONLY_HUMAN_SIGNED",
+      "overwrite_prior": false,
+      "requires": [
+        "new version",
+        "supersedes_version",
+        "supersedes_hash",
+        "new calibration evidence",
+        "human actor",
+        "signed_at",
+        "new contract_hash"
+      ]
+    },
+    "currency": "USD",
+    "downstream_bindings": {
+      "absence_or_mismatch_result": "PROHIBIT_GENERATION_RANKING_APPROVAL_AND_CREATOR_PAYLOAD",
+      "required_targets": [
+        "GLD management candidates",
+        "entry transition proofs",
+        "strategy candidates",
+        "scenario outputs",
+        "ranking ledger rows",
+        "replay rows",
+        "outcome rows",
+        "GUI approvals",
+        "bridge reservations",
+        "creator payloads"
+      ],
+      "required_values": [
+        "execution_cost_contract_version",
+        "execution_cost_contract_hash"
+      ]
+    },
+    "official_source_schedule": {
+      "accessed_at": "2026-08-03T16:05:00.3163596Z",
+      "exercise_assignment_fee_statement": "IBKR lists no separate exercise or assignment fee; ordinary transaction and settlement risks remain",
+      "options_commission_url": "https://www.interactivebrokers.com/en/pricing/commissions-options.php",
+      "other_fees_url": "https://www.interactivebrokers.com/en/pricing/other-fees.php",
+      "schedule_limit": "account plan and venue-specific third-party decomposition were unavailable, so the conservative all-in fallback governs"
+    },
+    "precision_and_aggregation": {
+      "aggregate_order": "calculate each leg at full Decimal precision, sum legs, then sum entry and planned exit",
+      "binary_float_allowed": false,
+      "cost_quantum_usd": "0.01",
+      "intermediate_precision": "FULL_DECIMAL",
+      "multiplier_source": "authoritative standard-contract definition; expected value 100",
+      "rounding": "ROUND_CEILING",
+      "rounding_stage": "FINAL_COMPONENT_AND_FINAL_TOTAL"
+    },
+    "purpose": "sole signed real-account execution-cost authority for candidate, ranking, replay, approval, and review-instruction evidence",
+    "quote_spread_and_slippage": {
+      "adverse_slippage": {
+        "entry_per_option_share": "max(0.01 USD, 0.25 * displayed_spread)",
+        "event_or_stop_exit_multiplier": "1.50",
+        "planned_exit_per_option_share": "max(0.02 USD, 0.50 * displayed_spread)",
+        "round_trip_normal_formula": "sum((entry_adverse + planned_exit_adverse) * multiplier * leg_quantity)",
+        "stress_formula": "entry_adverse plus 1.50 times planned_exit_adverse for every leg",
+        "stress_required_for": [
+          "earnings or binary event window",
+          "stop or forced-risk-reduction exit",
+          "marketable cleanup",
+          "spread widening alert"
+        ]
+      },
+      "executable_base_price": {
+        "buy_leg": "ASK",
+        "sell_leg": "BID",
+        "spread_treatment": "the natural bid or ask already charges the displayed crossing cost; adverse slippage is an additional reserve"
+      },
+      "quote_hard_gates": {
+        "ask": "finite and greater than zero",
+        "bid": "finite and greater than zero",
+        "crossed_bid_greater_than_ask": "NO_TRADE",
+        "locked_bid_equals_ask": "NO_TRADE",
+        "maximum_age_seconds": "5",
+        "missing_leg_quote": "NO_TRADE",
+        "observation_coherence": "all leg quotes must belong to one hash-bound coherent snapshot",
+        "stale_quote": "NO_TRADE"
+      },
+      "unknown_future_exit_spread": "use the current displayed spread with the planned-exit floor and relevant stress multiplier; never assume zero"
+    },
+    "review_policy": {
+      "minimum_independent_complete_execution_events": 30,
+      "promotion_effect": "DISCOVERY_ONLY",
+      "required_fields_per_future_event": [
+        "arrival NBBO",
+        "submitted combo limit",
+        "fill prices",
+        "contract ratios",
+        "actual commissions and fees",
+        "entry or exit classification",
+        "event and liquidity regime"
+      ],
+      "revision_requires_human_signature": true,
+      "tail_claim_before_threshold": "PROHIBITED"
+    }
+  },
+  "provenance": {
+    "observed_at": "2026-08-03T16:05:00.316359+00:00",
+    "source": "data/options_copilot/evidence/checkpoints/P0/execution-cost-contract/calibration-source.v1.json",
+    "source_hash": "54b4329500fdc7c2d00652201dbd99896294ccef1e35124550a199941f2f04b8",
+    "source_hash_algorithm": "SHA-256(canonical_json)",
+    "source_schedule": [
+      "https://www.interactivebrokers.com/en/pricing/commissions-options.php",
+      "https://www.interactivebrokers.com/en/pricing/other-fees.php"
+    ]
+  },
+  "schema": "options_copilot.governance.signed_contract.v1",
+  "signed_at": "2026-08-03T16:07:25.881586+00:00",
+  "supersedes_hash": null,
+  "supersedes_version": null,
+  "version": "v1"
+}

@@ -1,0 +1,713 @@
+"use strict";
+
+const ENDPOINTS = Object.freeze({
+  status: "/api/status",
+  latest: "/api/runs/latest",
+  runs: "/api/runs",
+  news: "/api/news",
+  earnings: "/api/earnings",
+  views: "/api/views",
+  tracking: "/api/tracking",
+  marketState: "/api/market-state",
+  meta: "/api/meta",
+});
+const ACTION_NAMES = Object.freeze({
+  open: "建立", reverse: "反转", close_direction: "转为中性", close: "结束",
+  strengthen: "加强", weaken: "减弱", volatility: "波动判断变化",
+});
+const STATUS_REFRESH_MS = 15000;
+const DIRECTION_NAMES = Object.freeze({ bullish: "看涨", bearish: "看跌", neutral: "中性" });
+const VOL_NAMES = Object.freeze({ expand: "波动放大", contract: "波动收敛", neutral: "波动不变" });
+const RUN_STATUS = Object.freeze({ ok: "完成", partial: "部分完成", failed: "失败", running: "运行中" });
+const SOURCE_NAMES = Object.freeze({
+  jin10: "金十", finnhub_market: "Finnhub 市场", finnhub_company: "Finnhub 公司", finnhub: "Finnhub", earnings: "财报日历",
+});
+const HOUR_NAMES = Object.freeze({ bmo: "盘前", amc: "盘后", dmh: "盘中" });
+
+const appState = { latestRunId: null, wasRunning: false, run: null, loaded: false, meta: null, tracking: null };
+
+function el(tag, options = {}, children = []) {
+  const node = document.createElement(tag);
+  if (options.text !== undefined && options.text !== null) node.textContent = String(options.text);
+  if (options.className) node.className = options.className;
+  if (options.title) node.title = options.title;
+  for (const child of children) if (child) node.appendChild(child);
+  return node;
+}
+
+function setText(id, text) {
+  const node = document.getElementById(id);
+  if (node) node.textContent = text;
+}
+
+function clear(node) {
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+
+function numberOrNull(value) {
+  const number = Number(value);
+  return value === null || value === undefined || !Number.isFinite(number) ? null : number;
+}
+
+function money(value, digits = 0) {
+  const number = numberOrNull(value);
+  if (number === null) return "—";
+  return `${number < 0 ? "-" : ""}$${Math.abs(number).toLocaleString("en-US", {
+    minimumFractionDigits: digits, maximumFractionDigits: digits,
+  })}`;
+}
+
+function percent(value, digits = 0) {
+  const number = numberOrNull(value);
+  return number === null ? "—" : `${(number * 100).toFixed(digits)}%`;
+}
+
+function localTime(iso) {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("zh-CN", { hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+async function getJson(url, init) {
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  return response.json();
+}
+
+function chip(text, tone) {
+  return el("span", { text, className: `chip ${tone || ""}` });
+}
+
+async function refreshStatus() {
+  let status;
+  try {
+    status = await getJson(ENDPOINTS.status);
+  } catch (error) {
+    const chips = document.getElementById("chips");
+    clear(chips);
+    chips.appendChild(chip("服务不可达", "bad"));
+    return;
+  }
+  setText("clock", `纽约 ${status.new_york} ｜ 北京 ${status.beijing}`);
+  const chips = document.getElementById("chips");
+  clear(chips);
+  const latest = status.latest_run;
+  const ibkr = latest ? latest.ibkr : null;
+  chips.appendChild(chip(
+    `IBKR ${ibkr === "ok" ? "已连接" : ibkr === "unavailable" ? "未连接" : ibkr || "—"} (${status.ibkr.host}:${status.ibkr.port})`,
+    ibkr === "ok" ? "ok" : "bad",
+  ));
+  const llmOk = status.secrets.deepseek_api_key && status.llm.enabled;
+  chips.appendChild(chip(`LLM ${llmOk ? status.llm.model : "未启用"}`, llmOk ? "ok" : "warn"));
+  const counts = status.news_24h || {};
+  chips.appendChild(chip(`新闻24h 金十${counts.jin10 || 0} / Finnhub${counts.finnhub || 0}`, (counts.jin10 || 0) > 0 ? "ok" : "warn"));
+  const schedule = status.schedule || {};
+  if (schedule.enabled) {
+    const next = (schedule.next_runs || [])[0];
+    chips.appendChild(chip(`下次自动运行 ${next ? localTime(next) : "—"}`, "ok"));
+  } else {
+    chips.appendChild(chip("自动调度关闭", "warn"));
+  }
+  const running = Boolean(status.running);
+  const button = document.getElementById("run-button");
+  button.disabled = running;
+  button.textContent = running ? "运行中…" : "立即运行";
+  if (running) chips.appendChild(chip(`运行中（${status.running.trigger === "manual" ? "手动" : status.running.slot}）`, "warn"));
+
+  const latestId = latest && latest.status !== "running" ? latest.id : null;
+  if (!appState.loaded || latestId !== appState.latestRunId || (appState.wasRunning && !running)) {
+    appState.loaded = true;
+    appState.latestRunId = latestId;
+    await refreshRun();
+    await refreshRuns();
+  }
+  appState.wasRunning = running;
+}
+
+async function refreshRun() {
+  try {
+    appState.run = await getJson(ENDPOINTS.latest);
+  } catch (error) {
+    appState.run = null;
+  }
+  renderRun();
+  renderIdeas();
+  renderViews();
+  renderPositions();
+  await refreshTracking();
+}
+
+function stageBox(label, value, note, tone) {
+  return el("div", { className: "stage" }, [
+    el("div", { className: "label", text: label }),
+    el("div", { className: `value ${tone || ""}`, text: value }),
+    note ? el("div", { className: "note", text: note }) : null,
+  ]);
+}
+
+function renderRun() {
+  const run = appState.run;
+  const stages = document.getElementById("stage-list");
+  clear(stages);
+  const errorNode = document.getElementById("run-error");
+  errorNode.classList.add("hidden");
+  if (!run) {
+    setText("run-meta", "还没有运行记录，点击“立即运行”");
+    setText("macro", "暂无");
+    return;
+  }
+  const params = run.stages && run.stages.params ? ` ｜ 参数 ${run.stages.params.version}` : "";
+  setText("run-meta", `#${run.id} ｜ ${run.trading_date} ${run.slot === "manual" ? "手动" : run.slot + " ET"} ｜ ${RUN_STATUS[run.status] || run.status} ｜ ${localTime(run.finished_at || run.started_at)}${params}`);
+  const s = run.stages || {};
+  const news = s.news || [];
+  const newsNote = news.map((r) => `${SOURCE_NAMES[r.source] || r.source}: ${r.status === "ok" ? "+" + r.count : r.status}${r.detail ? "（" + r.detail + "）" : ""}`).join("；");
+  const newsOk = news.length > 0 && news.every((r) => r.status !== "failed");
+  stages.appendChild(stageBox("新闻采集", !news.length ? "未采集" : newsOk ? "正常" : "部分失败", newsNote, newsOk ? "pos" : "neg"));
+  const ibkr = s.ibkr || {};
+  stages.appendChild(stageBox("IBKR", { ok: "已连接", unavailable: "未连接", failed: "出错", disabled: "未启用" }[ibkr.status] || "—", ibkr.detail || (ibkr.underlyings ? `报价 ${ibkr.underlyings} 个标的` : ""), ibkr.status === "ok" ? "pos" : "neg"));
+  const tagging = s.tagging || {};
+  const tagUsage = tagging.usage || {};
+  const tagNote = [
+    tagging.detail,
+    tagging.remaining ? `待分类 ${tagging.remaining} 条` : "",
+    tagUsage.calls ? `${tagUsage.calls} 次调用，约 ¥${tagUsage.cost_cny}` : "",
+    (tagging.errors || []).join("；"),
+  ].filter(Boolean).join("；");
+  stages.appendChild(stageBox("新闻分类", tagging.status === "skipped" ? "未启用" : `新分类 ${tagging.tagged || 0} 条`, tagNote, tagging.status === "failed" ? "neg" : "pos"));
+  const views = s.views || {};
+  const changeCount = (views.changes || []).length;
+  stages.appendChild(stageBox("观点账本", `${views.open || 0} 个观点`, `依据 ${views.tagged_news || 0} 条已分类新闻；本次变化 ${changeCount} 个`, "pos"));
+  const options = s.options || {};
+  const reasonCounts = {};
+  for (const reason of Object.values(options.skipped || {})) {
+    const key = String(reason).split(":")[0];
+    reasonCounts[key] = (reasonCounts[key] || 0) + 1;
+  }
+  const skippedNote = Object.entries(reasonCounts).map(([reason, count]) => `${reason} ×${count}`).join("；");
+  const pricingNote = options.pricing === "reference" ? "休市：按收盘参考价估算（标 *）" : options.pricing === "live" ? "实时买卖价" : "";
+  const sources = options.sources || {};
+  const sourceNote = sources.cboe || sources.ibkr ? `数据：CBOE ${sources.cboe || 0} / IBKR ${sources.ibkr || 0}` : "";
+  const live = options.live_check || {};
+  const liveNote = live.status === "ok" ? `IBKR 实时核对 ${live.ideas_checked}/${options.ideas} 个推荐` : live.status === "failed" ? "IBKR 实时核对失败" : "";
+  const rules = s.rules || {};
+  const ladderNote = (rules.ladder || []).map((x) => `${x.symbol} 回撤 ${percent(x.drawdown, 1)}${x.tier ? `（第 ${x.tier} 级）` : ""}`).join("；");
+  const anyTier = (rules.ladder || []).some((x) => x.tier > 0);
+  stages.appendChild(stageBox("指数回撤阶梯", anyTier ? "已触发" : "未触发", ladderNote || "无历史数据", anyTier ? "pos" : ""));
+  const pos = s.positions || {};
+  const risk = pos.risk || {};
+  const riskNote = risk.net_liquidation ? `持仓最坏亏损 ${money(risk.open_risk)}（净值 ${percent(risk.open_risk_pct, 0)}），组合上限 ${money(risk.cap)}，剩余 ${money(risk.remaining)}` : "";
+  if (pos.groups !== undefined) {
+    stages.appendChild(stageBox("持仓", `${pos.groups} 组，${pos.action_alerts || 0} 条需处理`, riskNote, pos.action_alerts ? "neg" : "pos"));
+  }
+  renderPositionAlerts(run);
+  const capNote = options.over_cap ? `${options.over_cap} 个最大亏损超过账户上限 ${money(options.loss_cap)} 已过滤` : "";
+  stages.appendChild(stageBox("期权分析", options.status === "ok" ? `${(options.symbols || []).length} 个标的 → ${options.ideas || 0} 个推荐` : options.status === "partial" ? "中途断开" : "未执行", [sourceNote, options.pricing === "reference" && sources.cboe ? "休市：CBOE 收盘报价" : pricingNote, liveNote, capNote, options.detail || skippedNote].filter(Boolean).join("；"), options.status === "ok" ? "pos" : "neg"));
+  if (run.error) {
+    errorNode.textContent = `错误：${run.error}`;
+    errorNode.classList.remove("hidden");
+  }
+  setText("macro", run.macro_summary || "暂无（模型未运行）");
+}
+
+function legText(leg) {
+  return `${leg.action}${leg.quantity > 1 ? leg.quantity : ""} ${leg.strike}${leg.right}`;
+}
+
+function viewLabel(view) {
+  if (!view) return el("span", { text: "—" });
+  const text = `${DIRECTION_NAMES[view.direction] || view.direction} ${"★".repeat(view.conviction || 0)}`;
+  return el("span", { className: view.direction, text, title: view.rationale || "" });
+}
+
+function renderIdeas() {
+  const body = document.querySelector("#ideas-table tbody");
+  clear(body);
+  const empty = document.getElementById("ideas-empty");
+  const detail = document.getElementById("idea-detail");
+  detail.classList.add("hidden");
+  const run = appState.run;
+  const ideas = run ? run.ideas || [] : [];
+  renderDropped(run && run.stages && run.stages.options ? run.stages.options.dropped || [] : []);
+  if (!ideas.length) {
+    const options = run && run.stages ? run.stages.options || {} : {};
+    empty.textContent = !run ? "暂无数据"
+      : options.status === "skipped" ? "本次没有可用的期权数据源（CBOE 未启用且 IBKR 未连接）。新闻和观点已更新。"
+      : options.status === "partial" ? "IBKR 在分析途中断开（见上方“期权分析”说明），本次推荐不完整；自动调度会在 15 分钟后重试。"
+      : "本次没有满足条件（正期望优势、流动性）的组合。没有观点优势时不推荐交易是正常结果。";
+    empty.classList.remove("hidden");
+    return;
+  }
+  empty.classList.add("hidden");
+  for (const idea of ideas) {
+    const row = el("tr", {}, [
+      el("td", { text: idea.rank }),
+      el("td", { className: idea.status === "new" ? "status-new" : "", text: idea.status === "new" ? "新增" : idea.status === "kept" ? "保持" : "—" }),
+      el("td", { text: `${idea.symbol}${idea.indicative ? " *" : ""}${idea.origin === "ladder" ? " ⓡ" : ""}`, title: idea.origin === "ladder" ? "指数回撤阶梯规则" : idea.indicative ? "收盘参考价" : "" }),
+      el("td", {}, [viewLabel(idea.view)]),
+      el("td", { text: idea.structure_name }),
+      el("td", { text: `${idea.expiry.slice(5)}（${idea.dte}天）` }),
+      el("td", { className: "legs", text: idea.legs.map(legText).join(" / ") }),
+      el("td", { className: "num", text: `${idea.net_premium >= 0 ? "付" : "收"} ${money(Math.abs(idea.net_premium))}` }),
+      el("td", { className: "num neg", text: money(idea.max_loss) }),
+      el("td", { className: "num pos", text: idea.max_profit === null ? "无上限" : money(idea.max_profit) }),
+      el("td", { className: "num", text: idea.reward_risk === null ? "∞" : idea.reward_risk.toFixed(2) }),
+      el("td", { text: (idea.breakevens || []).join(" / ") || "—" }),
+      el("td", { className: "num", text: `${percent(idea.view_pop)} / ${percent(idea.market_pop)}` }),
+      el("td", { className: `num ${idea.edge >= 0 ? "pos" : "neg"}`, text: `${money(idea.edge)}（${percent(idea.return_on_risk, 1)}）` }),
+      el("td", { className: "num", text: idea.suggested_quantity === null ? "—" : String(idea.suggested_quantity) }),
+    ]);
+    row.addEventListener("click", () => selectIdea(idea, row));
+    body.appendChild(row);
+  }
+}
+
+function renderPositionAlerts(run) {
+  const list = document.getElementById("position-alerts");
+  clear(list);
+  const book = run && run.snapshots && run.snapshots.positions ? run.snapshots.positions.book : null;
+  const alerts = [];
+  for (const group of (book && book.groups) || []) {
+    for (const alert of group.alerts || []) {
+      alerts.push(el("li", { className: `alert-${alert.level}`, text: `持仓提醒 ${group.symbol}：${alert.text}` }));
+    }
+  }
+  const risk = book && book.risk;
+  if (risk && risk.remaining !== null && risk.remaining <= 0) {
+    alerts.unshift(el("li", { className: "alert-action", text: `组合风险已满：现有期权持仓最坏亏损 ${money(risk.open_risk)}，超过上限 ${money(risk.cap)}，新组合建议张数均为 0；先处理现有持仓再开新仓。` }));
+  }
+  for (const item of alerts) list.appendChild(item);
+  list.classList.toggle("hidden", alerts.length === 0);
+}
+
+function renderDropped(dropped) {
+  const box = document.getElementById("ideas-dropped");
+  clear(box);
+  if (!dropped.length) {
+    box.classList.add("hidden");
+    return;
+  }
+  box.appendChild(el("div", { className: "muted", text: "与上次相比移出的组合：" }));
+  box.appendChild(el("ul", {}, dropped.map((d) => el("li", {
+    text: `${d.symbol} ${d.structure_name} ${d.expiry || ""} ${d.legs} —— ${d.reason}`,
+  }))));
+  box.classList.remove("hidden");
+}
+
+function selectIdea(idea, row) {
+  document.querySelectorAll("#ideas-table tbody tr").forEach((node) => node.classList.remove("selected"));
+  row.classList.add("selected");
+  const detail = document.getElementById("idea-detail");
+  clear(detail);
+  const view = idea.view || {};
+  const tags = [];
+  if (idea.indicative) tags.push(el("span", { className: "tag warn", text: "收盘参考价（IB 模型价±估算价差），开盘后需核实" }));
+  else if (idea.data_source === "cboe") tags.push(el("span", { className: "tag warn", text: "CBOE 延迟报价（交易时段约 15 分钟，休市为收盘价）" }));
+  else if (idea.delayed_data) tags.push(el("span", { className: "tag warn", text: "非实时报价" }));
+  if (idea.live_net_premium !== undefined && idea.live_net_premium !== null) {
+    tags.push(el("span", { className: "tag", text: `IBKR 实时中间价净权利金 ${money(idea.live_net_premium)}（延迟估算 ${money(idea.net_premium)}）` }));
+  }
+  if (idea.origin === "ladder") tags.push(el("span", { className: "tag", text: "指数回撤阶梯规则" }));
+  if (idea.already_holding) tags.push(el("span", { className: "tag warn", text: "已持有该标的" }));
+  if (idea.portfolio_ok === false) tags.push(el("span", { className: "tag warn", text: `超出组合剩余风险额度（剩余 ${money(idea.portfolio_remaining)}）` }));
+  if (idea.same_direction) tags.push(el("span", { className: "tag warn", text: "与现有持仓同向，风险叠加" }));
+  if (idea.exceeds_budget) tags.push(el("span", { className: "tag warn", text: "1 张即超单笔风险预算" }));
+  const left = el("div", {}, [
+    el("h3", { text: `${idea.symbol} ${idea.structure_name} ｜ 现价 ${idea.spot}` }),
+    el("p", {}, tags),
+    el("p", { text: `观点：${DIRECTION_NAMES[view.direction] || "—"}，信心 ${view.conviction || "—"}/5，证据分 ${signed(view.score)}，预期偏移 ${sigma(view.drift_sigma)}，${view.horizon_days || "—"} 天，${VOL_NAMES[view.volatility] || ""}${view.catalyst ? "，催化剂：" + view.catalyst : ""}` }),
+    el("p", { text: view.rationale || "（无理由）" }),
+    el("p", { className: "muted", text: `期望优势 ${money(idea.edge)} = 观点分布下价值 − 市场分布下价值 − 滑点 ${money(idea.slippage)} − 手续费 ${money(idea.fees, 2)}；计算采用的预期涨跌 ${percent(idea.drift, 1)}（模型给出的幅度按波动率封顶）。按估算成交价：观点下期望盈亏 ${money(idea.view_ev)}，市场下 ${money(idea.market_ev)}。ATM IV ${percent(idea.atm_iv, 1)}，观点波动率 ${percent(idea.view_sigma, 1)}。${idea.risk_budget ? `单笔风险预算 ${money(idea.risk_budget)}。` : ""}报价时间 ${localTime(idea.quote_time)}` }),
+  ]);
+  const legTable = el("table", {}, [
+    el("thead", {}, [el("tr", {}, ["方向", "合约", "买价", "卖价", "估算成交", "实时买/卖", "IV", "Delta", "未平仓"].map((t) => el("th", { text: t })))]),
+    el("tbody", {}, idea.legs.map((leg) => el("tr", {}, [
+      el("td", { text: `${leg.action} ×${leg.quantity}` }),
+      el("td", { text: `${idea.symbol} ${leg.expiry} ${leg.strike}${leg.right}` }),
+      el("td", { className: "num", text: leg.bid ?? "—" }),
+      el("td", { className: "num", text: leg.ask ?? "—" }),
+      el("td", { className: "num", text: leg.fill }),
+      el("td", { className: "num", text: leg.live_bid ? `${leg.live_bid} / ${leg.live_ask}` : "—" }),
+      el("td", { className: "num", text: percent(leg.iv, 1) }),
+      el("td", { className: "num", text: leg.delta ?? "—" }),
+      el("td", { className: "num", text: leg.open_interest ?? "—" }),
+    ]))),
+  ]);
+  left.appendChild(el("div", { className: "table-wrap" }, [legTable]));
+  const cited = appState.run && appState.run.cited_news ? appState.run.cited_news : {};
+  const items = (view.news_ids || []).map((id) => cited[String(id)]).filter(Boolean);
+  const right = el("div", {}, [
+    el("h3", { text: "引用的新闻" }),
+    items.length
+      ? el("ol", { className: "cited" }, items.map(newsLine))
+      : el("p", { className: "muted", text: "无引用" }),
+  ]);
+  detail.appendChild(left);
+  detail.appendChild(right);
+  detail.classList.remove("hidden");
+}
+
+function signed(value, digits = 1) {
+  const number = numberOrNull(value);
+  return number === null ? "—" : `${number >= 0 ? "+" : ""}${number.toFixed(digits)}`;
+}
+
+function sigma(value) {
+  const number = numberOrNull(value);
+  return number === null ? "—" : `${number.toFixed(2)}σ`;
+}
+
+const HORIZON_NAMES = Object.freeze({ intraday: "当天", days: "数天", weeks: "数周" });
+
+function impactChips(tag) {
+  if (!tag || !(tag.impacts || []).length) return null;
+  return el("div", { className: "impacts" }, tag.impacts.map((impact) => {
+    const arrow = impact.direction > 0 ? "↑" : impact.direction < 0 ? "↓" : "";
+    const vol = impact.vol === "up" ? " 波动↑" : impact.vol === "down" ? " 波动↓" : "";
+    const tone = impact.direction > 0 ? "up" : impact.direction < 0 ? "down" : "vol";
+    return el("span", {
+      className: `impact ${tone}`,
+      text: `${impact.symbol} ${arrow}${"●".repeat(impact.magnitude || 1)}${vol}`,
+      title: `力度 ${impact.magnitude}/3，${HORIZON_NAMES[impact.horizon] || impact.horizon}`,
+    });
+  }));
+}
+
+function newsLine(item) {
+  const tag = item.tag;
+  const metaParts = [localTime(item.published_at), SOURCE_NAMES[item.source] || item.source];
+  const meta = el("div", { className: "meta" }, [
+    tag ? el("span", { className: "badge", text: tag.category_name || tag.category }) : el("span", { className: "badge", text: "未分类" }),
+    tag ? el("span", { className: `badge imp${tag.importance}`, text: `重要性 ${tag.importance}` }) : null,
+    el("span", { text: metaParts.join(" ｜ ") }),
+  ]);
+  const summary = tag && tag.summary ? el("div", { className: "summary", text: tag.summary }) : null;
+  const titleText = summary ? item.title : item.title;
+  const title = item.url && item.url.startsWith("https://")
+    ? Object.assign(el("a", { className: summary ? "original" : "", text: titleText }), { href: item.url, target: "_blank", rel: "noopener noreferrer" })
+    : el("span", { className: summary ? "original muted" : "", text: titleText });
+  return el("li", {}, [meta, summary, title, impactChips(tag)]);
+}
+
+function renderViews() {
+  refreshViews();
+}
+
+function stateText(state) {
+  if (!state) return "无";
+  return `${DIRECTION_NAMES[state.direction] || state.direction}${state.conviction ? " " + "★".repeat(state.conviction) : ""}${state.volatility && state.volatility !== "neutral" ? " " + VOL_NAMES[state.volatility] : ""}`;
+}
+
+async function refreshViews() {
+  let data;
+  try { data = await getJson(ENDPOINTS.views); } catch (error) { return; }
+  const body = document.querySelector("#views-table tbody");
+  clear(body);
+  document.getElementById("views-empty").classList.toggle("hidden", (data.book || []).length > 0);
+  for (const view of data.book || []) {
+    body.appendChild(el("tr", {}, [
+      el("td", { text: view.symbol }),
+      el("td", { className: view.direction, text: DIRECTION_NAMES[view.direction] || view.direction }),
+      el("td", { text: "★".repeat(view.conviction || 0) }),
+      el("td", { className: `num ${view.score >= 0 ? "pos" : "neg"}`, text: signed(view.score) }),
+      el("td", { className: "num", text: signed(view.vol_score) }),
+      el("td", { className: "num", text: sigma(view.drift_sigma) }),
+      el("td", { className: "num", text: view.horizon_days }),
+      el("td", { text: VOL_NAMES[view.volatility] || view.volatility }),
+      el("td", { text: view.catalyst || "—" }),
+      el("td", { text: localTime(view.opened_at) }),
+      el("td", {}, [el("ol", { className: "contributors" }, (view.contributors || []).slice(0, 3).map((c) => el("li", {
+        text: `${c.summary}（${Math.abs(c.value) >= 0.05 ? signed(c.value) : "波动" + signed(c.vol)}）`,
+      })))]),
+    ]));
+  }
+  const changes = document.querySelector("#view-changes-table tbody");
+  clear(changes);
+  for (const change of data.changes || []) {
+    changes.appendChild(el("tr", {}, [
+      el("td", { text: localTime(change.at) }),
+      el("td", { text: change.symbol }),
+      el("td", { text: ACTION_NAMES[change.action] || change.action }),
+      el("td", { text: `${stateText(change.before)} → ${stateText(change.after)}（证据分 ${signed(change.score)}）` }),
+      el("td", { text: (change.reasons || []).map((r) => `${r.summary}（${signed(r.value)}）`).join("；") || "证据衰减" }),
+    ]));
+  }
+  await refreshMarketState();
+}
+
+function compactNumber(value) {
+  const number = numberOrNull(value);
+  if (number === null) return "—";
+  if (Math.abs(number) >= 1e9) return `$${(number / 1e9).toFixed(2)}B`;
+  if (Math.abs(number) >= 1e6) return `$${(number / 1e6).toFixed(2)}M`;
+  return money(number, 0);
+}
+
+async function refreshMarketState() {
+  let data;
+  try { data = await getJson(ENDPOINTS.marketState); } catch (error) { return; }
+  const body = document.querySelector("#market-state-table tbody");
+  clear(body);
+  const rows = data.latest || [];
+  document.getElementById("market-state-empty").classList.toggle("hidden", rows.length > 0);
+  for (const state of rows) {
+    body.appendChild(el("tr", {}, [
+      el("td", { text: state.symbol }),
+      el("td", { className: "num", text: money(state.spot, 2) }),
+      el("td", { className: "num", text: percent(state.iv_30d, 1) }),
+      el("td", { className: "num", text: percent(state.iv_90d, 1) }),
+      el("td", { className: "num", text: percent(state.term_slope, 1) }),
+      el("td", { className: "num", text: percent(state.skew_25d, 1) }),
+      el("td", { className: "num", text: percent(state.butterfly_25d, 1) }),
+      el("td", { className: "num", text: percent(state.iv_minus_hv20, 1) }),
+      el("td", { className: "num", text: compactNumber(state.gex) }),
+      el("td", { className: "num", text: state.oi_put_call === null ? "—" : Number(state.oi_put_call).toFixed(2) }),
+      el("td", { className: "num", text: `${percent(state.own_iv_percentile, 0)}（${state.history_days || 0} 天）` }),
+      el("td", { text: localTime(state.updated_at || state.as_of) }),
+    ]));
+  }
+}
+
+function trackingValue(row) {
+  return row.status === "closed" ? row.exit || {} : row.mark || {};
+}
+
+function renderTrackingSummary(stats) {
+  const summary = document.getElementById("tracking-summary");
+  clear(summary);
+  summary.appendChild(stageBox("已平仓", `${stats.closed || 0} 笔`, `胜率 ${percent(stats.win_rate, 1)}`, "pos"));
+  summary.appendChild(stageBox("累计结果", money(stats.pnl_total), `累计风险 ${money(stats.risk_total)}；收益风险比 ${percent(stats.return_on_risk, 1)}`, (stats.pnl_total || 0) >= 0 ? "pos" : "neg"));
+  summary.appendChild(stageBox("预测 vs 实际", percent(stats.predicted_return_on_risk, 1), `实际 ${percent(stats.return_on_risk, 1)}`, ""));
+  summary.appendChild(stageBox("持有中", `${stats.open || 0} 笔`, `浮动盈亏 ${money(stats.open_unrealized)}`, (stats.open_unrealized || 0) >= 0 ? "pos" : "neg"));
+  setText("tracking-sample", stats.enough_sample ? "样本已达到最低观察门槛。" : `样本不足（已平仓 ${stats.closed || 0} 笔 < ${stats.min_sample || 30} 笔），结论仅供参考`);
+}
+
+function renderTrackingGroups(stats) {
+  const grouping = document.getElementById("tracking-group").value;
+  const body = document.querySelector("#tracking-groups-table tbody");
+  clear(body);
+  for (const [name, metrics] of Object.entries(stats[grouping] || {})) {
+    body.appendChild(el("tr", {}, [
+      el("td", { text: name }),
+      el("td", { className: "num", text: metrics.count }),
+      el("td", { className: "num", text: percent(metrics.win_rate, 1) }),
+      el("td", { className: `num ${(metrics.pnl_total || 0) >= 0 ? "pos" : "neg"}`, text: money(metrics.pnl_total) }),
+      el("td", { className: "num", text: percent(metrics.return_on_risk, 1) }),
+      el("td", { className: "num", text: percent(metrics.predicted_return_on_risk, 1) }),
+    ]));
+  }
+}
+
+async function refreshTracking() {
+  const status = document.getElementById("tracking-status").value;
+  let data;
+  try { data = await getJson(`${ENDPOINTS.tracking}?status=${status}&limit=1000`); } catch (error) { return; }
+  appState.tracking = data;
+  renderTrackingSummary(data.stats || {});
+  renderTrackingGroups(data.stats || {});
+  const body = document.querySelector("#tracking-table tbody");
+  clear(body);
+  const rows = data.ideas || [];
+  document.getElementById("tracking-empty").classList.toggle("hidden", rows.length > 0);
+  for (const row of rows) {
+    const result = trackingValue(row);
+    const tableRow = el("tr", { className: "clickable" }, [
+      el("td", { text: localTime(row.entered_at) }),
+      el("td", { text: row.symbol }),
+      el("td", { text: row.structure_name }),
+      el("td", { className: "legs", text: (row.legs || []).map(legText).join(" / ") }),
+      el("td", { text: row.origin === "ladder" ? "ⓡ 阶梯" : "新闻" }),
+      el("td", { className: "num", text: `${(row.net_premium || 0) >= 0 ? "付" : "收"} ${money(Math.abs(row.net_premium || 0))}` }),
+      el("td", { className: "num neg", text: money(row.max_loss) }),
+      el("td", { className: "num", text: percent(row.predicted_return_on_risk, 1) }),
+      el("td", { className: `num ${(result.pnl || 0) >= 0 ? "pos" : "neg"}`, text: money(result.pnl) }),
+      el("td", { className: "num", text: percent(result.return_on_risk, 1) }),
+      el("td", { text: row.status === "open" ? "持有中" : (row.exit && row.exit.text) || "已平仓" }),
+      el("td", { text: row.params_version }),
+    ]);
+    tableRow.addEventListener("click", () => selectTracking(row.id, tableRow));
+    body.appendChild(tableRow);
+  }
+}
+
+async function selectTracking(id, selectedRow) {
+  document.querySelectorAll("#tracking-table tbody tr").forEach((row) => row.classList.remove("selected"));
+  selectedRow.classList.add("selected");
+  let record;
+  try { record = await getJson(`${ENDPOINTS.tracking}/${id}`); } catch (error) { return; }
+  const detail = document.getElementById("tracking-detail");
+  clear(detail);
+  const idea = record.entry.idea;
+  const state = record.entry.market_state;
+  const marks = el("table", {}, [
+    el("thead", {}, [el("tr", {}, ["时间", "现价", "估值", "盈亏", "剩余天数"].map((text) => el("th", { text })))]),
+    el("tbody", {}, (record.marks || []).map((mark) => el("tr", {}, [
+      el("td", { text: localTime(mark.marked_at) }),
+      el("td", { className: "num", text: money(mark.spot, 2) }),
+      el("td", { className: "num", text: money(mark.value, 2) }),
+      el("td", { className: `num ${(mark.pnl || 0) >= 0 ? "pos" : "neg"}`, text: money(mark.pnl, 2) }),
+      el("td", { className: "num", text: mark.dte }),
+    ]))),
+  ]);
+  detail.appendChild(el("div", {}, [
+    el("h3", { text: `${idea.symbol} ${idea.structure_name}` }),
+    el("p", { className: "muted", text: `入选运行 #${record.entry_run_id}；累计入选 ${record.times_listed} 次；参数 ${record.params_version}` }),
+    state ? el("p", { text: `入场市场状态：IV30 ${percent(state.iv_30d, 1)}，IV90 ${percent(state.iv_90d, 1)}，25Δ偏斜 ${percent(state.skew_25d, 1)}，GEX ${compactNumber(state.gex)}` }) : el("p", { className: "muted", text: "入场时没有可用的市场状态。" }),
+    el("div", { className: "table-wrap" }, [marks]),
+  ]));
+  detail.classList.remove("hidden");
+}
+
+function renderGroups(snapshots) {
+  const body = document.querySelector("#groups-table tbody");
+  clear(body);
+  const book = snapshots.positions ? snapshots.positions.book : null;
+  const groups = book ? book.groups || [] : [];
+  document.getElementById("groups-empty").classList.toggle("hidden", groups.length > 0);
+  const risk = book && book.risk;
+  setText("risk-meta", risk && risk.net_liquidation
+    ? `期权持仓最坏亏损 ${money(risk.open_risk)}（净值 ${percent(risk.open_risk_pct, 0)}）；组合上限 ${money(risk.cap)}；剩余额度 ${money(risk.remaining)}${(risk.undefined || []).length ? `；无法确定风险：${risk.undefined.join(",")}` : ""}`
+    : "最近一次运行没有账户数据");
+  for (const group of groups) {
+    const pnlClass = group.pnl === null ? "" : group.pnl >= 0 ? "pos" : "neg";
+    body.appendChild(el("tr", {}, [
+      el("td", { text: group.symbol }),
+      el("td", { className: "legs", text: group.legs.map((leg) => `${leg.quantity > 0 ? "买" : "卖"}${Math.abs(leg.quantity)} ${leg.strike}${leg.right}`).join(" / ") }),
+      el("td", { text: group.nearest_expiry ? `${group.nearest_expiry.slice(5)}（${group.dte}天）` : "—" }),
+      el("td", { className: "num", text: `${group.kind === "credit" ? "收" : "付"} ${money(Math.abs(group.entry_cost))}` }),
+      el("td", { className: "num", text: group.current_value === null ? "—" : money(group.current_value) }),
+      el("td", { className: `num ${pnlClass}`, text: group.pnl === null ? "—" : money(group.pnl) }),
+      el("td", { className: "num neg", text: group.max_loss === null ? "无法确定" : money(group.max_loss) }),
+      el("td", { className: "num pos", text: group.max_profit === null ? "无上限/不定" : money(group.max_profit) }),
+      el("td", {}, [(group.alerts || []).length
+        ? el("ul", { className: "alert-list" }, group.alerts.map((a) => el("li", { className: `alert-${a.level}`, text: a.text })))
+        : el("span", { className: "muted", text: "无" })]),
+    ]));
+  }
+}
+
+function renderPositions() {
+  const body = document.querySelector("#positions-table tbody");
+  clear(body);
+  const snapshots = appState.run ? appState.run.snapshots || {} : {};
+  renderGroups(snapshots);
+  const account = snapshots.account ? snapshots.account.summary : null;
+  if (!account) {
+    setText("account-meta", "最近一次运行没有连上 IBKR");
+    return;
+  }
+  setText("account-meta", `净清算价值 ${money(account.net_liquidation)} ${account.currency} ｜ ${localTime(account.observed_at)}`);
+  for (const position of account.positions || []) {
+    body.appendChild(el("tr", {}, [
+      el("td", { text: position.label }),
+      el("td", { text: position.sec_type }),
+      el("td", { className: "num", text: position.quantity }),
+      el("td", { className: "num", text: money(position.avg_cost, 2) }),
+    ]));
+  }
+}
+
+async function refreshRuns() {
+  let runs = [];
+  try { runs = await getJson(`${ENDPOINTS.runs}?limit=40`); } catch (error) { return; }
+  const body = document.querySelector("#runs-table tbody");
+  clear(body);
+  for (const run of runs) {
+    body.appendChild(el("tr", {}, [
+      el("td", { text: run.id }),
+      el("td", { text: run.trading_date }),
+      el("td", { text: run.slot === "manual" ? "手动" : run.slot }),
+      el("td", { text: run.trigger === "schedule" ? "自动" : "手动" }),
+      el("td", { className: run.status === "ok" ? "pos" : run.status === "failed" ? "neg" : "", text: RUN_STATUS[run.status] || run.status }),
+      el("td", { text: run.ibkr || "—" }),
+      el("td", { text: { ledger: "账本", llm: "模型", reused: "复用", fallback: "兜底" }[run.views] || run.views || "—" }),
+      el("td", { className: "num", text: run.idea_count ?? "—" }),
+      el("td", { text: localTime(run.started_at) }),
+      el("td", { className: "neg", text: run.error || "" }),
+    ]));
+  }
+}
+
+async function loadMeta() {
+  if (appState.meta) return;
+  try { appState.meta = await getJson(ENDPOINTS.meta); } catch (error) { return; }
+  const select = document.getElementById("news-category");
+  for (const [key, name] of Object.entries(appState.meta.categories || {})) {
+    const option = el("option", { text: name });
+    option.value = key;
+    select.appendChild(option);
+  }
+}
+
+async function refreshNews() {
+  await loadMeta();
+  const params = new URLSearchParams({ hours: "24", limit: "300" });
+  const source = document.getElementById("news-source").value;
+  const importance = document.getElementById("news-importance").value;
+  const category = document.getElementById("news-category").value;
+  const symbol = document.getElementById("news-symbol").value.trim().toUpperCase();
+  if (source) params.set("source", source);
+  if (importance !== "0") params.set("min_importance", importance);
+  if (category) params.set("category", category);
+  if (/^[A-Z]{1,5}$/.test(symbol)) params.set("symbol", symbol);
+  const url = `${ENDPOINTS.news}?${params.toString()}`;
+  let items = [];
+  try { items = await getJson(url); } catch (error) { return; }
+  const list = document.getElementById("news-list");
+  clear(list);
+  if (!items.length) list.appendChild(el("li", { className: "muted", text: "暂无新闻" }));
+  for (const item of items) list.appendChild(newsLine(item));
+}
+
+async function refreshEarnings() {
+  let events = [];
+  try { events = await getJson(ENDPOINTS.earnings); } catch (error) { return; }
+  const body = document.querySelector("#earnings-table tbody");
+  clear(body);
+  for (const event of events) {
+    body.appendChild(el("tr", {}, [
+      el("td", { text: event.date }),
+      el("td", { text: event.symbol }),
+      el("td", { text: HOUR_NAMES[event.hour] || "未定" }),
+      el("td", { className: "num", text: event.eps_estimate ?? "—" }),
+    ]));
+  }
+}
+
+async function triggerRun() {
+  const button = document.getElementById("run-button");
+  button.disabled = true;
+  button.textContent = "运行中…";
+  try {
+    await getJson(ENDPOINTS.runs, { method: "POST" });
+  } catch (error) {
+    if (error.status !== 409) button.disabled = false;
+  }
+  setTimeout(refreshStatus, 1500);
+}
+
+function switchTab(name) {
+  document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".tab").forEach((s) => s.classList.toggle("active", s.id === `tab-${name}`));
+  if (name === "news") refreshNews();
+  if (name === "views") refreshViews();
+  if (name === "earnings") refreshEarnings();
+  if (name === "tracking") refreshTracking();
+  if (name === "runs") refreshRuns();
+}
+
+document.getElementById("run-button").addEventListener("click", triggerRun);
+document.getElementById("news-source").addEventListener("change", refreshNews);
+document.getElementById("news-importance").addEventListener("change", refreshNews);
+document.getElementById("news-category").addEventListener("change", refreshNews);
+document.getElementById("news-symbol").addEventListener("change", refreshNews);
+document.getElementById("tracking-status").addEventListener("change", refreshTracking);
+document.getElementById("tracking-group").addEventListener("change", () => renderTrackingGroups((appState.tracking || {}).stats || {}));
+document.querySelectorAll("#tabs button").forEach((button) => button.addEventListener("click", () => switchTab(button.dataset.tab)));
+
+refreshStatus();
+setInterval(refreshStatus, STATUS_REFRESH_MS);

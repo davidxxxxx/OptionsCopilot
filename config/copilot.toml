@@ -1,0 +1,146 @@
+# OptionsCopilot settings. Put personal overrides in config/copilot.local.toml
+# (same keys, git-ignored). API keys live in secrets/api_keys.local.json.
+
+[paths]
+data_dir = "data/copilot"
+secrets_file = "secrets/api_keys.local.json"
+
+[universe]
+# Always analysed every run (market view is expressed through these).
+core = ["SPY", "QQQ", "IWM"]
+# Symbols the model may form views on and that earnings/news are filtered to.
+# Liquid, optionable US names; edit freely.
+watchlist = [
+  "SPY", "QQQ", "IWM", "DIA", "TLT", "GLD", "SLV", "USO", "UNG", "XLE", "XLF",
+  "XLK", "XLV", "XLI", "XLY", "XLP", "XLU", "SMH", "KRE", "XBI", "XHB", "XRT",
+  "EEM", "EWZ", "FXI", "KWEB", "ARKK", "HYG", "VXX",
+  "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "TSLA", "AVGO", "AMD", "NFLX",
+  "ORCL", "CRM", "ADBE", "INTC", "MU", "QCOM", "TSM", "ARM", "PLTR", "SMCI",
+  "DELL", "IBM", "CSCO", "SNOW", "PANW", "CRWD", "NET", "DDOG", "SHOP", "UBER",
+  "ABNB", "DASH", "RBLX", "ROKU", "SNAP", "PINS", "COIN", "MSTR", "HOOD", "SOFI",
+  "AFRM", "PYPL", "XYZ", "MARA", "RIOT", "BABA", "PDD", "JD", "BIDU", "NIO",
+  "JPM", "BAC", "GS", "MS", "WFC", "C", "V", "MA", "XOM", "CVX", "OXY",
+  "BA", "CAT", "DE", "GE", "LMT", "LLY", "UNH", "PFE", "MRNA", "JNJ", "ABBV",
+  "NVO", "WMT", "COST", "TGT", "HD", "LOW", "NKE", "SBUX", "MCD", "DIS",
+  "KO", "PEP", "F", "GM", "RIVN", "T", "VZ",
+]
+
+[ibkr]
+host = "127.0.0.1"
+# 4001 = IB Gateway live, 7496 = TWS live, 4002/7497 = paper.
+port = 4001
+client_id = 31
+connect_timeout_seconds = 15
+# 4 = live data where entitled, otherwise delayed; frozen last values when closed.
+market_data_type = 4
+quote_wait_seconds = 6
+max_concurrent_quotes = 80
+# Option subscriptions per batch; with the market closed IB answers only part of large batches.
+option_batch_size = 20
+# Pause between symbols so request bursts never pile up inside IB Gateway.
+symbol_pause_seconds = 1.0
+# IB's historical data farm can be down for hours; give up on history quickly.
+history_timeout_seconds = 12
+
+[options]
+# cboe = free CBOE delayed chains (about 15 min delayed during the session, closing
+# quotes otherwise); a symbol CBOE cannot serve falls back to IBKR. ibkr = IBKR only.
+source = "cboe"
+cboe_timeout_seconds = 30
+# During regular hours, re-quote the final ideas' legs from IBKR in real time.
+live_refresh = true
+
+[news]
+lookback_hours = 24
+jin10_max_items = 200
+finnhub_company_news_symbols = 30
+finnhub_items_per_symbol = 5
+earnings_days_ahead = 10
+
+[llm]
+enabled = true
+model = "deepseek-v4-flash"
+max_news_items = 220
+timeout_seconds = 150
+max_output_tokens = 8000
+# News classification (each item is classified once and stored).
+tag_batch_size = 40
+tag_workers = 4
+max_tags_per_run = 600
+
+[views]
+# View ledger: score = sum(direction x magnitude x importance weight x time decay) over
+# tagged news of the last lookback_days. Views open at |score| >= open_threshold and
+# close only below close_threshold, so they do not flip back and forth.
+lookback_days = 10
+open_threshold = 1.5
+close_threshold = 0.75
+vol_open_threshold = 3.0
+vol_close_threshold = 1.5
+# Expected move in standard deviations per score point (capped by strategy.max_drift_sigma).
+sigma_per_point = 0.08
+importance_weights = [0.0, 0.5, 1.0, 2.0]
+half_life_intraday = 0.5
+half_life_days = 3.0
+half_life_weeks = 10.0
+max_open_views = 30
+
+[strategy]
+min_dte = 5
+max_dte = 60
+expiries_per_symbol = 2
+max_symbols_per_run = 15
+min_open_interest = 50
+max_leg_spread_pct = 0.30
+# Fraction of the half-spread paid beyond mid on every leg (0 = mid fill).
+fill_ratio = 0.5
+commission_per_contract = 0.70
+max_ideas = 10
+max_ideas_per_symbol = 2
+# Advisory sizing only: suggested contracts keep max loss under this share of net liquidation.
+risk_per_trade_pct = 0.10
+# Stickiness: a new idea replaces one from the previous list only if its edge/risk is this
+# much better (0.25 = 25%).
+keep_margin = 0.25
+# Never open short-premium structures (credit spreads, condors, calendars, diagonals) whose
+# short leg spans an earnings date.
+no_short_premium_through_earnings = true
+# Drop ideas whose max loss exceeds this share of net liquidation (0 = keep all).
+max_loss_cap_pct = 0.20
+# A view may move the expected price by at most this many standard deviations over its
+# horizon, so an over-confident model cannot inflate the edge.
+max_drift_sigma = 0.4
+# Fat-tail mixture for the price distribution (core vs tail lognormal components).
+tail_weight = 0.15
+tail_vol_multiple = 1.6
+core_vol_multiple = 0.88
+
+[rules]
+# Index drawdown ladder (from the reference account): drawdown of the close from its 52-week
+# closing high. Tier 1 (5%): sell put spreads; tier 2 (10%): buy call spreads; tier 3 (15%):
+# longer-dated (90-180 day) calls / call spreads. ladder_drift_sigma is the mean reversion
+# assumed at each tier, in standard deviations of the horizon move.
+ladder_symbols = ["SPY", "QQQ", "IWM"]
+ladder_tiers = [0.05, 0.10, 0.15]
+ladder_drift_sigma = [0.10, 0.20, 0.30]
+# Worst-case loss of open option positions plus one new idea, as a share of net liquidation.
+portfolio_risk_cap_pct = 0.20
+# Exit alerts for open positions.
+take_profit_credit_pct = 0.50      # credit structures: close after capturing 50% of max profit
+take_profit_debit_pct = 0.75       # debit spreads: close at 75% of max profit
+take_profit_long_option_pct = 1.00 # single long options: close at +100% of the premium paid
+stop_loss_debit_pct = 0.50         # debit: exit after losing half the premium paid
+stop_loss_credit_multiple = 2.0    # credit: exit when the loss reaches 2x the credit received
+time_exit_dte = 7
+short_premium_time_exit_dte = 21
+
+[schedule]
+enabled = true
+# New York times on NYSE trading days. 09:00 uses prior-close option quotes.
+run_times_et = ["09:00", "09:45", "12:30", "15:00"]
+retry_minutes = 15
+max_attempts_per_slot = 4
+
+[web]
+host = "127.0.0.1"
+port = 8891

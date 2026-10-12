@@ -1,0 +1,336 @@
+{
+  "actor": "human:xujie",
+  "contract_hash": "b5d969d13fc624cdb2c49b3a78ce0fa34119bedd95f51db7b25ba9c977f55a3c",
+  "contract_kind": "INITIAL_CHAMPION_SCENARIO_POLICY",
+  "effective_at": "2026-08-03T16:11:43.941811+00:00",
+  "payload": {
+    "baseline_feature_weights": {
+      "market_direction_score": {
+        "formula": "D=0.35*trend_20d+0.25*momentum_5d+0.20*sector_relative_strength_20d+0.20*price_volume_confirmation",
+        "input_range": "[-1,1]",
+        "weights": {
+          "momentum_5d": "0.25",
+          "price_volume_confirmation": "0.20",
+          "sector_relative_strength_20d": "0.20",
+          "trend_20d": "0.35"
+        }
+      },
+      "ranking_score_points": {
+        "cost_adjusted_expected_value": "30",
+        "exit_plan_quality": "5",
+        "liquidity": "20",
+        "reward_to_risk": "20",
+        "scenario_robustness": "15",
+        "total_before_supporting_bonus": "100",
+        "volatility_fit": "10"
+      },
+      "volatility_state_score": {
+        "formula": "V=0.30*iv_percentile+0.25*term_structure+0.25*skew_tail_pressure+0.20*realized_implied_gap",
+        "input_range": "[-1,1]; positive values increase tail mass and negative values increase range mass",
+        "weights": {
+          "iv_percentile": "0.30",
+          "realized_implied_gap": "0.20",
+          "skew_tail_pressure": "0.25",
+          "term_structure": "0.25"
+        }
+      }
+    },
+    "calibration": {
+      "dataset_hash": "27324f4c41d9ab45788d3efca7a6ef1c2095100d57cb737101e951ef54e12423",
+      "dataset_id": "INITIAL-CHAMPION-NO-ELIGIBLE-CAUSAL-LABELS-V1",
+      "eligible_labeled_scenarios": 0,
+      "legacy_trades_eligible_for_probability_training": false,
+      "method": "DETERMINISTIC_EXPERT_PRIOR_WITH_LIVE_POINT_IN_TIME_MARKET_FEATURES",
+      "probability_label": "MODEL_DERIVED_NOT_EMPIRICALLY_CALIBRATED",
+      "production_profit_claim": false,
+      "status": "FROZEN_CONSERVATIVE_INITIAL_CHAMPION"
+    },
+    "consumer_gates": {
+      "P5": "BLOCKED_UNLESS_THIS_CONTRACT_AND_EXECUTION_COST_CONTRACT_VALIDATE",
+      "P7": "VERIFY_THIS_FROZEN_POLICY_VERSION_AND_HASH_BEFORE_ANY_REVIEW_INSTRUCTION_PAYLOAD",
+      "P8": "VERIFY_THIS_FROZEN_POLICY_VERSION_AND_HASH_FOR_REPLAY_AND_OUTCOMES",
+      "ambiguous_multiple_effective_policies": "NO_TRADE",
+      "contract_missing_future_tampered_stale_or_mismatched": "NO_TRADE",
+      "required_identity_fields": [
+        "current_policy_version",
+        "current_policy_hash",
+        "policy_authority_marker_hash"
+      ]
+    },
+    "contract_id": "initial-champion-scenario-policy.v1",
+    "correction_policy": {
+      "automatic_mutation": false,
+      "delete_prior": false,
+      "mode": "APPEND_ONLY_HUMAN_SIGNED",
+      "overwrite_prior": false,
+      "requires": [
+        "new version",
+        "supersedes_version",
+        "supersedes_hash",
+        "new calibration provenance",
+        "human actor",
+        "signed_at",
+        "new contract_hash"
+      ]
+    },
+    "decimal_and_rounding": {
+      "binary_float_allowed": false,
+      "feature_precision": "FULL_DECIMAL",
+      "probability_quantum": "0.000001",
+      "probability_residual_bucket": "RANGE",
+      "probability_rounding": "ROUND_HALF_EVEN",
+      "ranking_score_quantum": "0.0001",
+      "ranking_score_rounding": "ROUND_HALF_EVEN"
+    },
+    "feature_normalization": {
+      "common_rule": "all inputs are computed point in time from hash-bound prior-only observations and clipped to [-1,1]; missing inputs are not imputed",
+      "iv_percentile": "2*point_in_time_252_session_percentile-1",
+      "momentum_5d": "clip(return_5d/(1.5*realized_volatility_20d*sqrt(5/252)),-1,1)",
+      "price_volume_confirmation": "sign(return_1d)*clip(relative_volume_20d-1,0,1)",
+      "realized_implied_gap": "clip((realized_volatility_20d-atm_iv)/max(atm_iv,0.01),-1,1)",
+      "sector_relative_strength_20d": "clip((underlying_return_20d-sector_return_20d)/(2*realized_volatility_20d),-1,1)",
+      "skew_tail_pressure": "clip(abs(put_25_delta_iv-call_25_delta_iv)/max(atm_iv,0.01),-1,1)",
+      "term_structure": "clip((near_atm_iv-next_regular_atm_iv)/max(next_regular_atm_iv,0.01),-1,1)",
+      "trend_20d": "clip(log(spot/ema_20d)/(2*realized_volatility_20d),-1,1)",
+      "zero_or_nonfinite_denominator": "NO_TRADE"
+    },
+    "hard_no_trade_thresholds": {
+      "account_and_authority": {
+        "creator_or_order_authority_changes_eligibility": false,
+        "maximum_open_option_combinations": 1,
+        "open_option_combination_for_new_entry": "NO_TRADE",
+        "strategy_nav_contract_required": true,
+        "unknown_external_outcome_allowed": false,
+        "unsubmitted_instruction_count_required": 0,
+        "working_order_count_required": 0
+      },
+      "contract_and_payoff": {
+        "adjusted_contract_allowed": false,
+        "currency": "USD",
+        "exact_finite_maximum_loss_required": true,
+        "multiplier": "100",
+        "naked_call_or_put_allowed": false,
+        "security_type": "OPT",
+        "standard_contract_definition_required": true,
+        "uncovered_ratio_short_allowed": false
+      },
+      "cost_and_expectancy": {
+        "execution_cost_contract_hash": "d5922fa9808c4f1e7150362026037d17fb550d6f64daf8f86985042053e5428b",
+        "execution_cost_contract_version": "v1",
+        "maximum_total_round_trip_cost_to_max_profit": "0.20",
+        "minimum_after_cost_expected_value_usd": "max(5.00,0.05*maximum_loss)",
+        "minimum_max_profit_to_maximum_loss": "1.20",
+        "normal_after_cost_ev": "must exceed the minimum",
+        "stress_after_cost_ev": "must be greater than or equal to 0.00"
+      },
+      "data_completeness": {
+        "broker_snapshot_maximum_age_seconds": "5",
+        "conflicted_evidence": "NO_TRADE",
+        "hard_evidence_classes_required": [
+          "MARKET",
+          "VOLATILITY",
+          "LIQUIDITY"
+        ],
+        "missing_feature": "NO_TRADE",
+        "secdef_and_quote_hashes_required": true,
+        "timezones_required": true
+      },
+      "dte_and_holding": {
+        "below_7_dte": "NO_TRADE",
+        "maximum_holding_trading_days": 5,
+        "minimum_dte": 7,
+        "normal_dte_maximum": 35,
+        "normal_dte_minimum": 14,
+        "signed_exception_band": "7-13 DTE only; never below 7"
+      },
+      "liquidity": {
+        "maximum_absolute_bid_ask_spread_usd_per_share": "0.50",
+        "maximum_relative_bid_ask_spread": "0.20 of midpoint",
+        "minimum_20_session_underlying_median_dollar_volume_usd": "25000000",
+        "minimum_option_open_interest_per_leg": 100,
+        "minimum_same_day_option_volume_per_leg": 10,
+        "missing_volume_or_open_interest": "NO_TRADE",
+        "quote_maximum_age_seconds": "5",
+        "zero_locked_crossed_or_missing_bid_ask": "NO_TRADE"
+      },
+      "portfolio_risk": {
+        "a_grade_fraction": "0.15 only with a separate unexpired explicit human A-grade authority",
+        "campaign_progress_effect": "NONE",
+        "hard_reject_fraction": "risk_fraction >= 0.20",
+        "normal_fraction": "0.10",
+        "percentage_rule_priority": true
+      }
+    },
+    "learning_and_promotion": {
+      "a_grade_unlock_from_this_contract": false,
+      "independence_definition": "use the separately signed P8 independence specification; correlated or duplicate scenes count once",
+      "minimum_independent_scenarios_for_discovery": 30,
+      "production_auto_promotion": false,
+      "promotion_requires": [
+        "immutable evaluation report",
+        "separate current-policy authority",
+        "explicit human production approval",
+        "rollback authority"
+      ],
+      "threshold_effect": "DISCOVERY_ONLY"
+    },
+    "policy_identity": {
+      "champion_id": "RULES-SOFTMAX-CONSERVATIVE-V1",
+      "policy_role": "INITIAL_FROZEN_CHAMPION",
+      "purpose": "deterministic baseline probability, eligibility, structure-priority, and ranking policy",
+      "risk_tier": "NORMAL_10_PERCENT_ONLY"
+    },
+    "probability_methodology": {
+      "direction_score": "D from the signed market-direction feature weights, clipped to [-1,1]",
+      "expected_move": {
+        "calendar_days_source": "authoritative option expiration and decision timestamp",
+        "formula_fraction": "max(0.005,atm_iv*sqrt(calendar_days/365))",
+        "iv_source": "fresh broker-derived ATM interpolation from a coherent standard-option quote surface",
+        "missing_or_conflicted_input": "NO_TRADE"
+      },
+      "final_probability": "0.80*softmax(logit/1.25)+0.20/5 for each scenario",
+      "logits": {
+        "DOWN": "-0.65*D+0.15*V",
+        "RANGE": "0.75*(1-abs(D))-0.75*V",
+        "STRONG_DOWN": "-1.25*D+0.60*V",
+        "STRONG_UP": "1.25*D+0.60*V",
+        "UP": "0.65*D+0.15*V"
+      },
+      "probability_constraints": {
+        "minimum_each_from_uniform_shrinkage": "0.04",
+        "nonfinite_or_nonpositive_probability": "NO_TRADE",
+        "sum": "exactly 1.000000 after Decimal rounding; assign only the rounding residual to RANGE"
+      },
+      "scenarios": [
+        {
+          "bin": "standardized move <= -1.00",
+          "name": "STRONG_DOWN",
+          "representative_terminal_price": "max(0,spot*(1-1.25*expected_move_fraction))"
+        },
+        {
+          "bin": "-1.00 < standardized move < -0.25",
+          "name": "DOWN",
+          "representative_terminal_price": "max(0,spot*(1-0.60*expected_move_fraction))"
+        },
+        {
+          "bin": "-0.25 <= standardized move <= 0.25",
+          "name": "RANGE",
+          "representative_terminal_price": "spot"
+        },
+        {
+          "bin": "0.25 < standardized move < 1.00",
+          "name": "UP",
+          "representative_terminal_price": "spot*(1+0.60*expected_move_fraction)"
+        },
+        {
+          "bin": "standardized move >= 1.00",
+          "name": "STRONG_UP",
+          "representative_terminal_price": "spot*(1+1.25*expected_move_fraction)"
+        }
+      ],
+      "softmax_temperature": "1.25",
+      "supporting_evidence_probability_effect": "NONE",
+      "uniform_shrinkage_fraction": "0.20",
+      "volatility_score": "V from the signed volatility-state feature weights, clipped to [-1,1]"
+    },
+    "ranking_policy": {
+      "cost_adjusted_expected_value_points": "30*clip(net_ev/(0.25*maximum_loss),0,1)",
+      "diversity_dimensions": [
+        "underlying",
+        "thesis",
+        "structure"
+      ],
+      "eligibility_precedes_scoring": true,
+      "exit_plan_quality_points": "5 only when thesis invalidation, risk stop, profit take, time stop, maximum holding date, and bad-quote action are all hash-bound; otherwise NO_TRADE",
+      "final_score": "base_score + supporting_bonus, maximum 105",
+      "liquidity_points": "20 from signed spread, open-interest, volume, and underlying-dollar-volume quality after all minimums pass",
+      "maximum_candidates": 3,
+      "rank_one_only_can_enter_approval": true,
+      "reward_to_risk_points": "20*clip((reward_to_risk-1.20)/(3.00-1.20),0,1)",
+      "scenario_robustness_points": "15*clip((probability_of_positive_after_cost_pnl-0.50)/0.30,0,1)",
+      "stable_tie_break": [
+        "higher net after-cost expected value",
+        "lower exact maximum loss",
+        "higher structure priority",
+        "lexicographically smaller candidate_id"
+      ],
+      "volatility_fit_points": "10 times deterministic template-to-volatility-regime fit in [0,1]"
+    },
+    "strategy_priority": {
+      "directional_order": [
+        "DEBIT_VERTICAL",
+        "CREDIT_VERTICAL",
+        "BUTTERFLY",
+        "DIAGONAL",
+        "LONG_OPTION"
+      ],
+      "event_or_long_volatility_order": [
+        "DEBIT_VERTICAL",
+        "CALENDAR",
+        "DIAGONAL",
+        "BUTTERFLY",
+        "LONG_OPTION"
+      ],
+      "long_option_rule": "eligible only when no finite-risk combination survives and every normal risk and cost gate still passes",
+      "range_order": [
+        "BUTTERFLY",
+        "IRON_CONDOR",
+        "CALENDAR",
+        "CREDIT_VERTICAL",
+        "DIAGONAL"
+      ],
+      "structure_priority_tie_break": {
+        "BUTTERFLY": 6,
+        "CALENDAR": 3,
+        "CREDIT_VERTICAL": 5,
+        "DEBIT_VERTICAL": 7,
+        "DIAGONAL": 2,
+        "IRON_CONDOR": 4,
+        "LONG_OPTION": 1
+      },
+      "unregistered_or_free_text_structure": "NO_TRADE"
+    },
+    "supporting_evidence_caps": {
+      "aggregate_maximum_absolute_ranking_points": "3.00",
+      "eligibility_effect": "NONE",
+      "families": {
+        "EARNINGS": {
+          "maximum_absolute_ranking_points": "2.00",
+          "required_provenance": "SEC, issuer IR, or two consistent timestamped providers"
+        },
+        "NEWS": {
+          "maximum_absolute_ranking_points": "2.00",
+          "required_provenance": "official filing or issuer source preferred; aggregator conflict yields zero and a warning"
+        },
+        "POSITIONING": {
+          "included_signals": [
+            "Max Pain",
+            "Call Wall",
+            "Put Wall",
+            "Put-Call Ratio",
+            "estimated GEX"
+          ],
+          "maximum_absolute_ranking_points": "1.00",
+          "warning": "open interest may be delayed and dealer direction is unknown"
+        }
+      },
+      "hard_gate_override": false,
+      "probability_effect": "NONE",
+      "risk_limit_effect": "NONE",
+      "role": "SUPPORTING_ONLY"
+    }
+  },
+  "provenance": {
+    "execution_cost_contract_hash": "d5922fa9808c4f1e7150362026037d17fb550d6f64daf8f86985042053e5428b",
+    "observed_at": "2026-08-03T16:11:43.941811+00:00",
+    "source": "data/options_copilot/evidence/checkpoints/P0/initial-policy/calibration-source.v1.json",
+    "source_hash": "27324f4c41d9ab45788d3efca7a6ef1c2095100d57cb737101e951ef54e12423",
+    "source_hash_algorithm": "SHA-256(canonical_json)",
+    "strategy_nav_contract_hash": "536a938ed773c606ac8c80e6c6a2046f68dff3ee41d43ae599743194ef2dbedd"
+  },
+  "schema": "options_copilot.governance.signed_contract.v1",
+  "signed_at": "2026-08-03T16:14:40.287946+00:00",
+  "supersedes_hash": null,
+  "supersedes_version": null,
+  "version": "v1"
+}

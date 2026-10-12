@@ -1,268 +1,133 @@
-# OptionsCopilot
+# OptionsCopilot 期权副驾
 
-本地优先、单用户、Windows 环境下的美股 / ETF 期权研究助手。系统通过永久只读的
-IBKR 数据链路，结合新闻、事件、基本面和确定性风险计算，组织股票研究池、期权结构池、
-候选排名与持仓观察。**系统不提交、修改或撤销券商订单。**
+本地运行的美股期权筛选工具：**新闻 → 观点 → IBKR 期权报价 → 每日 Top 10 组合**。
+系统只读 IBKR、永不下单；看完排名后由你自己在 TWS 里下单。
 
-本仓库是 2026-10-02 复核并公开发布的源码快照：包含应用源码、测试、锁定依赖、运维脚本和模块文档，
-不包含账户快照、成交记录、凭据、个人 NAV 授权材料、数据库、日志、备份或本地开发历史。
-这不是可直接投入实盘的完整交付；生产特征、历史输入和报价管理链仍有已知限制。
+## 它每天做什么
 
-本次复核确认可发布源码与 2026-09-12 的已筛选快照一致，更新的是公开发布文档，
-不包含交易功能变更。公开 GitHub 源码不等于公开本机服务：受支持的 PowerShell 启动器
-固定绑定 `127.0.0.1`，不要绕过启动器向外暴露服务。仓库尚未选择开源许可证；
-公开可见不代表已授予开源许可。
+1. **采集新闻**：金十快讯（MCP）、Finnhub 市场/公司新闻、财报日历（Finnhub，失败时用 Nasdaq）。
+2. **读取行情**：通过 IBKR 只读连接获取账户净值、持仓、标的价格和一年日线（每天缓存一次）。
+3. **新闻分类**：每条新闻只交给 DeepSeek 分类一次并永久保存：类别（宏观数据、央行、财报、地缘…）、
+   重要性 0-3、中文摘要，以及对具体标的的影响（方向、力度、周期、是否推高波动）。
+4. **观点账本**：不再让模型直接给观点，而是按固定规则计算：
+   `证据分 = Σ 方向 × 力度 × 重要性权重 × 时间衰减`，同类同向的重复报道依次只计 1、1/2、1/4…；
+   证据分超过 1.5 才建立观点，跌破 0.75 才结束，反向超过 1.5 才反转；信心星级也有缓冲区。
+   同样的新闻永远得到同样的观点，每次变化都记录是哪几条新闻触发的。
+5. **构建组合**：按观点选择到期日和行权价，生成有限风险结构：
+   牛/熊市借方价差、牛/熊市贷方价差、买入看涨/看跌、铁鹰、铁蝶、蝶式、买入跨式/宽跨式。
+6. **打分排序**：`期望优势 = 观点分布下的价值 − 市场分布下的价值 − 滑点 − 手续费`，
+   再除以最大亏损排序；每个标的最多 2 个，取前 10。没有优势时不推荐，这是正常结果。
+   **推荐有粘性**：上次清单里的组合会用新报价重新定价，新组合要好 25% 以上才替换它，移出的会注明原因。
+7. **推荐复盘**：每个首次进入推荐列表的非参考价组合都会冻结入场价格，之后每次运行用 CBOE 报价重新估值，
+   并按与持仓提醒一致的止盈/止损规则模拟平仓；入场时距到期超过 7 天的在剩 7 天时平仓，否则持有到期。
+   这些都是纸面结果，不代表真实成交，也没有覆盖提前指派等实盘情况；至少积累约 30 笔已平仓记录后再观察统计。
 
-## 文档导航
+## 市场状态
 
-| 文档 | 内容 |
-| --- | --- |
-| [功能清单](docs/FEATURES.md) | 按使用场景整理功能，并标明研究 / 条件可用 / 未完成边界 |
-| [模块地图](docs/MODULES.md) | 模块职责、源码入口、数据流、API 和测试定位 |
-| [当前状态与阻塞](docs/STATUS.md) | 已实现与未验收的区别、已知问题、完整流程验收条件 |
-| [发布与隐私边界](docs/PUBLISHING.md) | 上传内容、排除内容、测试范围和源码快照的使用限制 |
-| [测试说明](docs/TESTING.md) | 可分发源码的离线测试命令，以及需要本地私有材料的测试 |
-| [操作说明](options_copilot/README.md) | 只读 GUI、可选数据源和兼容审批桥接的操作说明 |
+系统每天从本次运行已读取的 CBOE 期权链计算并留存 IV30、IV90、期限斜率、25Δ 偏斜/蝶式、GEX、
+认沽/认购比和 IV−HV20。它们目前只在“观点”页展示，不参与观点、候选组合、期望优势或排名。
 
-功能整理不改变现有代码目录，也不改变交易权限。下面保留本地维护步骤；其中引用的
-迁移基线、个人签名和本地账本并不随 GitHub 源码包分发。
+休市时（包括纽约 09:00 盘前时段）使用 CBOE 的收盘报价；只有改用 IBKR 取数时才会用 IB 模型价加估算价差，
+那类组合标 `*`（收盘参考价）。无论哪种，下单前请在 TWS 核实实时价格。
 
-## Safety contract
+## 交易规则（借鉴参考账户的优点、避开它的缺点）
 
-- Research and scanning are review-only. This repository has no authority to
-  submit an order or replace the user's final IBKR confirmation.
-- IBKR access is permanently `readonly=True`; no environment variable can
-  disable that boundary.
-- Normal risk is capped at 10% of current NAV, A-grade at 15%, and 20% is an
-  absolute rejection line.
-- Only one open defined-risk combination is allowed. Normal entries are 14-35
-  DTE; 0-3 DTE and sub-7-DTE structures are prohibited.
-- Stale, conflicting, incomplete, or unverifiable inputs fail closed to
-  observation/`NO_TRADE`.
+| 规则 | 做法 | 配置（`config/copilot.toml`） |
+| --- | --- | --- |
+| 指数回撤阶梯 | SPY/QQQ/IWM 收盘距 52 周收盘高点回撤 5% → 卖出看跌价差；10% → 买入看涨价差；15% → 买入 90-180 天的看涨/看涨价差。作为独立的“规则观点”参与排名，标 ⓡ | `[rules] ladder_*` |
+| 财报禁卖 | 卖方结构（贷方价差、铁鹰、铁蝶、日历/对角）的空头腿不得跨越财报日 | `strategy.no_short_premium_through_earnings` |
+| 单笔上限 | 最大亏损超过净值 20% 的组合不推荐；建议张数按 10% 计算 | `strategy.max_loss_cap_pct`、`risk_per_trade_pct` |
+| 组合上限 | 现有期权持仓最坏亏损 + 新组合 ≤ 净值 20%；超出的推荐标“超出组合剩余额度”，建议张数为 0 | `rules.portfolio_risk_cap_pct` |
+| 同向叠加 | 新组合与现有持仓同方向（大盘 ETF 视为同一类）时提示 | — |
+| 平仓提醒 | 卖方赚到 50% 止盈、亏到收取权利金 2 倍止损；买方价差到 75% 止盈、亏一半止损；单腿买方翻倍止盈；距到期 ≤7 天、卖方 ≤21 天提醒；空头腿跨财报提醒；观点反向提醒；无限风险提醒 | `rules.take_profit_*`、`stop_loss_*`、`*_dte` |
+| 日历/对角价差 | 中性观点可用看涨日历价差；看涨/看跌且信心 ≥3 可用对角价差（PMCC 一类，长腿覆盖短腿） | — |
 
-## Setup
+明确不做：裸卖看涨、超出账户能力的卖看跌、通过移仓拖延亏损、逆势重仓对冲。
 
-The supported environment is PowerShell 7, CPython 3.12 or newer, and the
-project-owned interpreter at `G:\OptionsCopilot\.venv\Scripts\python.exe`.
-Use PowerShell 7 from `G:\OptionsCopilot`:
+## 数据来源
 
-```powershell
-Set-Location G:\OptionsCopilot
-pwsh.exe -NoProfile -File .\scripts\setup_options_copilot_env.ps1 -Mode Verify
-& .\.venv\Scripts\python.exe scripts\verify_locked_environment.py `
-    --lock requirements-dev.lock --allow-bootstrap pip --allow-bootstrap setuptools
-& .\.venv\Scripts\python.exe -m pip check
-```
+| 数据 | 来源 | 说明 |
+| --- | --- | --- |
+| 期权链（报价、IV、Greeks、未平仓） | **CBOE 延迟行情**（免费、无需登录） | 交易时段约延迟 15 分钟，休市时为收盘快照（真实买卖价）；某个标的取不到时自动改用 IBKR |
+| 实时核对 | IBKR | 美股交易时段内，对最终 Top 10 的各条腿再取一次 IBKR 实时买卖价，显示在详情里 |
+| 账户净值、持仓 | IBKR（只读） | 用于建议张数、20% 亏损上限和“已持有”提示；IBKR 不可用时仍会出推荐，只是没有仓位建议 |
+| 历史波动率、IV Rank | IBKR 日线（每天缓存一次） | 历史数据服务超时一次后，本次运行不再请求，避免拖慢 |
+| 指数 52 周高点（回撤阶梯） | Nasdaq 公开历史行情（每天缓存一次） | 免费、无需登录 |
 
-This normal setup and verification path consumes the committed locks and never runs a
-resolver. The target was created fresh and installed only with
-`--require-hashes --no-deps -r requirements-dev.lock`; the exact inventory
-audit rejects every extra package and version drift. Only `pip` and
-`setuptools` are allowed as interpreter-bootstrap distributions. `pip check`
-is supplementary dependency-consistency evidence, not proof that the installed
-inventory equals the lock.
+CBOE 数据来自其网站延迟行情页使用的公开接口，不是签约 API，没有服务保证，适合个人使用；
+如需完全用 IBKR，把 `config/copilot.local.toml` 里的 `[options] source` 设为 `"ibkr"`。
 
-`Mode Verify` also creates a separate, unique production verification
-environment beneath `G:\OptionsCopilot\data\options_copilot\hermetic`, installs
-it only with `--require-hashes --no-deps -r requirements.lock`, runs the same
-exact inventory audit and `pip check`, and removes that invocation-owned scratch
-environment afterward. It never installs production packages into `.venv`.
-
-Lock regeneration is a distinct maintainer action. It requires the target
-`.venv` to be absent and refuses to delete or replace a pre-existing target:
+## 快速开始
 
 ```powershell
-Set-Location G:\OptionsCopilot
-pwsh.exe -NoProfile -File .\scripts\setup_options_copilot_env.ps1 `
-    -Mode RegenerateAndCreate
+# 1. 检查配置、密钥和 IBKR 连通性
+.\.venv\Scripts\python.exe -m copilot check
+
+# 2. 立即完整运行一次（命令行输出结果）
+.\.venv\Scripts\python.exe -m copilot run
+
+# 3. 启动网页界面 + 自动调度
+pwsh -File .\scripts\start_copilot.ps1
+# 浏览器打开 http://127.0.0.1:8891
 ```
 
-`RegenerateAndCreate` uses a separate ignored G-drive bootstrap environment,
-installs only the requested resolver tool `pip-tools==7.6.0`, and runs the
-equivalent of these attributed lock-generation operations from
-`pyproject.toml`:
-
-```text
-piptools compile --resolver=backtracking --generate-hashes --strip-extras --output-file=requirements.lock pyproject.toml
-piptools compile --resolver=backtracking --generate-hashes --strip-extras --extra=dev --output-file=requirements-dev.lock pyproject.toml
-```
-
-It then creates the fresh `G:\OptionsCopilot\.venv` and installs only the
-self-contained `requirements-dev.lock`. The resolver bootstrap is never part of
-the target or production verification inventory.
-
-Before any `py`, venv, pip, or pip-tools subprocess, the setup script snapshots
-the process-scoped `PIP_CACHE_DIR`, `PIP_NO_CACHE_DIR`, `TEMP`, and `TMP`, points
-them to unique ignored locations beneath
-`G:\OptionsCopilot\data\options_copilot\hermetic`, and uses `--no-cache-dir`.
-Its `finally` path restores all caller values on success or failure and removes
-only scratch directories created by that invocation. The final sanitized JSON
-audit lists the target, bootstrap, production verification, cache, `TEMP`, and
-`TMP` paths so their G-drive containment can be inspected.
-
-The migrated provider file is
-`data\options_copilot\api_keys.local.json`. It is intentionally ignored by Git
-and remains plaintext local configuration. Never paste it into chat, logs,
-screenshots, source control, or shell arguments. IBKR credentials never belong
-in that file.
-
-## Start
-
-The launcher only binds loopback and refuses to replace an existing listener:
+开机/登录后自动运行（注册 Windows 计划任务：登录时启动，每天 20:30 检查一次，可唤醒电脑）：
 
 ```powershell
-pwsh.exe -NoProfile -File .\scripts\start_options_copilot.ps1 -Background -OpenBrowser
+pwsh -File .\scripts\install_autostart.ps1
 ```
 
-Default URL: `http://127.0.0.1:8891/`.
+## 自动调度
 
-Do not start a second copy while the old `G:\quantumtrading` instance is still
-using port 8891. Moving the live service to this folder requires a separate,
-explicitly supervised cutover and broker/read-only reconciliation.
+- 纽约时间 09:00、09:45、12:30、15:00（NYSE 交易日）各跑一次，见 `config/copilot.toml`。
+- **错过就补**：电脑晚开机时，会立刻运行“当前时间段”的那一次；更早错过的不再重放。
+- **失败就重试**：IBKR 没连上或模型失败时，本次标为“部分完成”，15 分钟后自动重试（每时段最多 4 次）。
+- **新闻随到随分类**：后台每 15 分钟拉取新闻并分类，运行时只需处理少量新新闻；宏观总结只在出现新的重要新闻时才重写。
+- 金十新闻每 15 分钟增量更新一次，界面新闻流保持最新。
 
-To inspect only the configured IBKR listener and Python dependency, without an
-IB API login or handshake:
+## 需要准备
+
+- **IB Gateway 或 TWS** 已登录，API 端口与配置一致（默认 `4001`），开启 API 连接。
+  建议在网关里开启每日自动重启（Auto restart），避免每天重新登录。
+- **密钥文件** `secrets/api_keys.local.json`（不进 git）：
+  `jin10_mcp_token`、`finnhub_api_key`、`deepseek_api_key`（可选 `alpha_vantage_api_key`），
+  也可以用环境变量 `JIN10_MCP_TOKEN` / `FINNHUB_API_KEY` / `DEEPSEEK_API_KEY` 覆盖。
+- **DeepSeek 账户余额**：余额不足时观点会退回中性，推荐数量会大幅减少。
+
+## 配置
+
+所有参数在 `config/copilot.toml`；个人修改写到 `config/copilot.local.toml`（同样的键，不进 git）。
+常改的项：`universe.watchlist`（自选池）、`ibkr.port`、`schedule.run_times_et`、
+`strategy.risk_per_trade_pct`（建议张数用的单笔风险比例）、`strategy.max_loss_cap_pct`（最大亏损超过净值该比例的组合直接不推荐，默认 20%）、`strategy.max_drift_sigma`（模型预期涨跌幅的上限，按波动率计）、`llm.model`。
+
+## 目录
+
+```
+copilot/            新内核（Python 约 4,100 行 + 网页约 700 行）
+  news/             金十 MCP、Finnhub、Nasdaq、采集器
+  analysis/         观点模型、DeepSeek、提示词与校验
+  market/           IBKR 只读适配、行情模型、历史统计、交易日历
+  strategies/       盈亏计算、概率分布、组合构建、排名
+  pipeline.py       一次完整运行（各阶段独立降级）
+  scheduler.py      调度、补跑、重试
+  web/              网页界面与 API
+config/             配置
+scripts/            启动与开机自启脚本
+tests/copilot/      测试
+legacy/             旧系统（只读参考，标签 legacy-final-2026-10-09）
+data/copilot/       运行数据（SQLite、日志，不进 git）
+```
+
+## 开发与验证
 
 ```powershell
-& .\.venv\Scripts\python.exe .\scripts\probe_options_copilot_ib_gateway.py
+.\.venv\Scripts\python.exe -m pytest
+node --check copilot/web/static/app.js
 ```
 
-Production launch performs no implicit install or network resolution. It uses
-the already verified project environment; environment creation and dependency
-maintenance remain explicit setup actions.
+## 安全边界
 
-### One-time pacing policy authority
-
-The five conservative IBKR market-data limits are approved once as a signed
-`PacingPolicyAuthority`. Schema v2 uses
-`LONG_LIVED_UNTIL_REVOKED`: it does not expire after 24 hours, the launcher
-auto-discovers the single installed `capability.json` plus `approval.json` on
-every start, and the request guard rechecks revocation before every read. The
-legacy schema v1 remains compatible and retains its 24-hour expiry.
-
-The human trust root and authority are each installed once from a real
-interactive PowerShell terminal. The private-key envelope stays outside the
-project and is protected by Windows DPAPI:
-
-```powershell
-& .\.venv\Scripts\python.exe -m options_copilot.operations.pacing_trust_bootstrap_cli `
-    --private-key-output G:\OptionsCopilotSecrets\pacing-private.dpapi.json `
-    --signer-key-id human-key:operator-pacing
-
-& .\.venv\Scripts\python.exe -m options_copilot.operations.pacing_authority_cli `
-    --capability <pacing-checkpoint>\capability.json `
-    --private-key G:\OptionsCopilotSecrets\pacing-private.dpapi.json `
-    --signer-key-id human-key:operator-pacing `
-    --approval-output <pacing-checkpoint>\approval.json
-```
-
-No daily confirmation is required afterward. To stop all new IBKR market-data
-reads immediately, install a signed revocation beside the authority; the
-running request guard observes it without a restart:
-
-```powershell
-& .\.venv\Scripts\python.exe -m options_copilot.operations.pacing_policy_revocation_cli `
-    --authority-dir <pacing-checkpoint> `
-    --private-key G:\OptionsCopilotSecrets\pacing-private.dpapi.json `
-    --signer-key-id human-key:operator-pacing `
-    --reason "operator requested"
-```
-
-Both contracts are permanently `review_only=true` and
-`direct_order_submission=false`; neither grants instruction or order authority.
-
-## Standalone workspace checkpoint
-
-This section is a local migration-maintenance procedure, not a fresh-clone
-quick start. The referenced historical commits, plans, evidence, and private
-authority files are deliberately absent from the source-only publication.
-
-Plan 03 exposes capture and Plan 04 uses the default verification path below.
-The evidence destination is ignored runtime evidence. Confirm it is ignored and
-must not already exist before capture; if it exists, stop and report the
-no-overwrite gate. Do not delete, replace, stage, or commit that evidence.
-
-```powershell
-Set-Location G:\OptionsCopilot
-$baseline = "data/options_copilot/evidence/workspace/phase-01/pre_edit_baseline.json"
-git check-ignore -q -- $baseline
-if ($LASTEXITCODE -ne 0) { throw "Workspace checkpoint is not ignored." }
-if (Test-Path -LiteralPath $baseline) {
-    throw "Workspace checkpoint must not already exist; no-overwrite gate."
-}
-& .\.venv\Scripts\python.exe -m options_copilot.operations.workspace_guard `
-    --capture `
-    --phase 01 `
-    --source-baseline-commit 7237246 `
-    --execution-baseline-commit 7237246 `
-    --baseline data/options_copilot/evidence/workspace/phase-01/pre_edit_baseline.json `
-    --allowlists options_copilot/operations/standalone_phase_allowlists.json
-```
-
-After capture, verification is the default operation and uses the same phase,
-ignored baseline, and standalone manifest:
-
-```powershell
-Set-Location G:\OptionsCopilot
-& .\.venv\Scripts\python.exe -m options_copilot.operations.workspace_guard `
-    --phase 01 `
-    --baseline data/options_copilot/evidence/workspace/phase-01/pre_edit_baseline.json `
-    --allowlists options_copilot/operations/standalone_phase_allowlists.json
-git diff --name-only 7237246..HEAD
-```
-
-The captured HEAD and current/later HEAD are observation metadata only.
-Commit `7237246` remains the immutable source and execution diff authority for
-capture, verification, and `git diff --name-only 7237246..HEAD`; no captured or
-later HEAD may advance that authority.
-
-## Verification
-
-Use the source-snapshot profile in [docs/TESTING.md](docs/TESTING.md) for a
-fresh clone. An unrestricted full pytest run also includes local-only tests
-that require deliberately excluded financial contracts and migration evidence.
-Do not reconstruct or self-sign that authority to make those tests pass.
-
-These environment and source checks do not contact IBKR or create instructions.
-`Mode Verify` creates a fresh production verification environment;
-its hash-locked pip install may access the configured package index:
-
-```powershell
-pwsh.exe -NoProfile -File .\scripts\setup_options_copilot_env.ps1 -Mode Verify
-& .\.venv\Scripts\python.exe scripts\verify_locked_environment.py `
-    --lock requirements-dev.lock --allow-bootstrap pip --allow-bootstrap setuptools
-& .\.venv\Scripts\python.exe -m pip check
-& .\.venv\Scripts\python.exe -m compileall -q options_copilot
-node --check options_copilot/frontend/app.js
-& .\.venv\Scripts\python.exe -m options_copilot.operations.authority_audit --json
-git diff --check
-```
-
-Only in the original local development installation, with the genuine
-authority/evidence corpus available, run the additional full-suite and
-migration-baseline checks:
-
-```powershell
-& .\.venv\Scripts\python.exe -m pytest tests/options_copilot -q
-& .\.venv\Scripts\python.exe -m options_copilot.operations.workspace_guard `
-    --phase 01 `
-    --baseline data/options_copilot/evidence/workspace/phase-01/pre_edit_baseline.json `
-    --allowlists options_copilot/operations/standalone_phase_allowlists.json
-```
-
-These environment, source, and safety checks are necessary but do not
-replace later acceptance against the live loopback service, current read-only
-broker reconciliation, scheduled decision evidence, or visible browser GUI.
-
-## Local state is not distributed
-
-An operator's installation may contain these local-only files:
-
-- `data/options_copilot/api_keys.local.json` (local-only, Git-ignored)
-- `data/options_copilot/governance/policy_authority.sqlite3` (private local authority, Git-ignored)
-- `data/options_copilot/evidence/` (private local evidence and baselines)
-
-None of these files, or the approval, bridge, ranking, scan, news, and
-runtime-observation databases, are uploaded. Local stores may be created when
-the runtime is deliberately started; that does not recreate missing human
-signatures or financial authority. See [publication boundaries](docs/PUBLISHING.md).
+- IBKR 连接固定 `readonly=True`，代码中不存在下单/改单/撤单调用（有测试守护）。
+- 网页只监听 `127.0.0.1`，没有登录验证，不要直接暴露到公网。
+- 发给 DeepSeek 的只有公开新闻、财报日历和公开行情；账户、持仓不会进入提示词。
+- 本工具是研究辅助，不构成投资建议。
