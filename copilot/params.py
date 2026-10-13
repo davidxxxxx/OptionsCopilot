@@ -8,7 +8,7 @@ from typing import Any
 
 from copilot.config import Settings
 
-SCORING_REVISION = 1
+SCORING_REVISION = 2
 
 
 def params_payload(settings: Settings) -> dict[str, Any]:
@@ -23,6 +23,13 @@ def params_payload(settings: Settings) -> dict[str, Any]:
         "views": asdict(settings.views),
         "strategy": asdict(settings.strategy),
         "rules": asdict(settings.rules),
+        "calendar": {"catalyst_symbols": list(settings.calendar.catalyst_symbols)},
+        "events": {
+            "study_symbols": list(settings.events.study_symbols),
+            "min_events": settings.events.min_events,
+            "min_t": settings.events.min_t,
+            "shrink_k": settings.events.shrink_k,
+        },
     }
 
 

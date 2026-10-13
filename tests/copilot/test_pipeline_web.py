@@ -1,21 +1,26 @@
 from __future__ import annotations
 
 import ast
+import json
 import time
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from copilot.news.collect import NewsSources
+from copilot.market.models import Position
+from copilot.news.macro_calendar import MacroEvent
 from copilot.news.models import NewsItem
 from copilot.pipeline import PipelineDeps, run_pipeline
 from copilot.runtime import Runtime
 from copilot.scheduler import RunManager
 from copilot.secrets import Secrets
+from copilot.store import Store
 from copilot.web.app import create_app
 
-from .conftest import FakeLlm, FakeMarket
+from .conftest import TODAY, FakeLlm, FakeMarket
 
 NOW = datetime(2026, 10, 9, 14, 0, tzinfo=timezone.utc)
 SPOTS = {"SPY": 600.0, "QQQ": 500.0, "NVDA": 180.0, "JPM": 300.0}
@@ -280,10 +285,11 @@ def test_ibkr_connect_works_from_a_worker_thread_in_a_fresh_process() -> None:
     assert output.stdout.strip().splitlines()[-1] == "unavailable", output.stdout + output.stderr
 
 
-def _cboe_deps(settings, store, *, market, cboe, model=None):
+def _cboe_deps(settings, store, *, market, cboe, model=None, index_history=None):
     return PipelineDeps(
         settings=settings, store=store, news_sources=None, llm=model or FakeLlm(RULES),
         market_factory=(lambda: market) if market else None, clock=lambda: NOW, option_source=cboe,
+        index_history=index_history,
     )
 
 
@@ -301,6 +307,220 @@ def test_cboe_produces_ideas_while_ibkr_is_down(settings, store) -> None:
     assert run["stages"]["options"]["sources"]["cboe"] >= 3
     assert run["ideas"] and all(i["data_source"] == "cboe" and i["delayed_data"] for i in run["ideas"])
     assert run["ideas"][0]["suggested_quantity"] is None  # net liquidation unknown
+
+
+def test_nasdaq_closes_fill_hv20_without_ibkr_and_share_ladder_cache(settings, store) -> None:
+    from .conftest import FakeCboe
+
+    seed_news(store)
+    calls = []
+
+    def history(symbol: str, today: date):
+        calls.append(symbol)
+        start = today - timedelta(days=80)
+        return [
+            (start + timedelta(days=index), 100.0 * (1.004 if index % 2 else 0.996) ** index)
+            for index in range(70)
+        ]
+
+    run = store.get_run(run_pipeline(
+        _cboe_deps(
+            settings, store, market=FakeMarket(SPOTS, unavailable=True), cboe=FakeCboe(SPOTS),
+            index_history=history,
+        ),
+        trigger="test", slot="manual",
+    ))
+    assert run["snapshots"]["underlying"]["NVDA"]["hv20"] is not None
+    assert run["stages"]["options"]["closes"] in {"nasdaq", "cache"}
+    assert calls.count("SPY") == 1 and calls.count("QQQ") == 1
+
+
+def test_macro_events_flow_to_ideas_tracking_stage_and_position_alerts(settings, store) -> None:
+    from .conftest import FakeCboe
+
+    seed_news(store)
+    event_day = TODAY + timedelta(days=2)
+    macro = MacroEvent(
+        source="tradingview", source_id="cpi", event_time=datetime.combine(
+            event_day, datetime.min.time(), timezone.utc
+        ) + timedelta(hours=12, minutes=30),
+        country="US", title="Inflation Rate YoY", category="cpi", importance=3,
+    )
+    store.replace_macro_events(
+        "tradingview", NOW - timedelta(days=1), NOW + timedelta(days=30), [macro]
+    )
+    expiry = TODAY + timedelta(days=21)
+    position = Position(
+        symbol="SPY", sec_type="OPT", quantity=-1, avg_cost=500.0, multiplier=100,
+        expiry=expiry, strike=600.0, right="C",
+    )
+    run = store.get_run(run_pipeline(
+        _cboe_deps(
+            settings, store,
+            market=FakeMarket(SPOTS, positions=(position,)),
+            cboe=FakeCboe(SPOTS),
+        ),
+        trigger="test", slot="manual",
+    ))
+    assert run["stages"]["calendar"]["major_next_days"][0]["category"] == "cpi"
+    tagged = [idea for idea in run["ideas"] if idea.get("macro_events")]
+    assert tagged and tagged[0]["macro_events"][0]["name"] == "CPI"
+    tracked = store.tracked_ideas(limit=None)
+    assert tracked and any(row["entry"]["idea"].get("macro_events") for row in tracked)
+    alerts = run["snapshots"]["positions"]["book"]["groups"][0]["alerts"]
+    assert "macro_event" in {alert["code"] for alert in alerts}
+
+
+def _run_same_day_macro_case(settings, store, monkeypatch, now: datetime):
+    import copilot.pipeline as pipeline_module
+    from .conftest import FakeCboe
+
+    seed_news(store)
+    event_time = datetime(TODAY.year, TODAY.month, TODAY.day, 12, 30, tzinfo=timezone.utc)
+    store.replace_macro_events(
+        "tradingview", event_time - timedelta(days=1), event_time + timedelta(days=1),
+        [MacroEvent(
+            "tradingview", "same-day-cpi", event_time, "US",
+            "Inflation Rate YoY", "cpi", 3,
+        )],
+    )
+    position = Position(
+        symbol="SPY", sec_type="OPT", quantity=-1, avg_cost=500.0, multiplier=100,
+        expiry=TODAY + timedelta(days=21), strike=600.0, right="C",
+    )
+    catalyst_events = []
+    original_macro_dates = pipeline_module._macro_dates
+
+    def capture_macro_dates(events):
+        catalyst_events.extend(events)
+        return original_macro_dates(events)
+
+    monkeypatch.setattr(pipeline_module, "_macro_dates", capture_macro_dates)
+    pipeline_deps = PipelineDeps(
+        settings=settings,
+        store=store,
+        news_sources=None,
+        llm=FakeLlm(RULES),
+        market_factory=lambda: FakeMarket(SPOTS, positions=(position,)),
+        clock=lambda: now,
+        option_source=FakeCboe(SPOTS),
+    )
+    run = store.get_run(run_pipeline(pipeline_deps, trigger="test", slot="manual"))
+    return run, catalyst_events
+
+
+def test_released_same_day_macro_event_is_excluded_from_forward_looking_outputs(
+    settings, store, monkeypatch,
+) -> None:
+    now = datetime(TODAY.year, TODAY.month, TODAY.day, 16, 30, tzinfo=timezone.utc)
+    run, catalyst_events = _run_same_day_macro_case(settings, store, monkeypatch, now)
+    assert catalyst_events == []
+    assert run["stages"]["calendar"]["major_next_days"] == []
+    assert all(not idea.get("macro_events") for idea in run["ideas"])
+    alerts = run["snapshots"]["positions"]["book"]["groups"][0]["alerts"]
+    assert "macro_event" not in {alert["code"] for alert in alerts}
+
+
+def test_unreleased_same_day_macro_event_is_included_in_forward_looking_outputs(
+    settings, store, monkeypatch,
+) -> None:
+    now = datetime(TODAY.year, TODAY.month, TODAY.day, 12, 0, tzinfo=timezone.utc)
+    run, catalyst_events = _run_same_day_macro_case(settings, store, monkeypatch, now)
+    assert any(event["category"] == "cpi" for event in catalyst_events)
+    assert run["stages"]["calendar"]["major_next_days"][0]["category"] == "cpi"
+    assert any(idea.get("macro_events") for idea in run["ideas"])
+    alerts = run["snapshots"]["positions"]["book"]["groups"][0]["alerts"]
+    assert "macro_event" in {alert["code"] for alert in alerts}
+
+
+def test_macro_event_web_endpoints_shapes_and_validation(settings, store) -> None:
+    from zoneinfo import ZoneInfo
+
+    today = datetime.now(ZoneInfo("America/New_York")).date()
+    moment = datetime.combine(today + timedelta(days=1), datetime.min.time(), timezone.utc) + timedelta(hours=13)
+    store.replace_macro_events(
+        "tradingview", moment - timedelta(days=1), moment + timedelta(days=1),
+        [
+            MacroEvent("tradingview", "web", moment, "US", "Inflation Rate YoY", "cpi", 3, "Sep", None, "2.8%", "2.7%"),
+            MacroEvent("tradingview", "other", moment + timedelta(hours=1), "US", "Existing Home Sales", "other", 3),
+        ],
+    )
+    pipeline_deps = deps(settings, store, market=None, model=None)
+    runtime = Runtime(settings, Secrets({}), store, pipeline_deps, RunManager(lambda trigger, slot: 0), None)
+    client = TestClient(create_app(runtime))
+    response = client.get("/api/macro-events?days=7&min_importance=3")
+    assert response.status_code == 200
+    rows = {row["category"]: row for row in response.json()}
+    row = rows["cpi"]
+    assert {"time", "time_ny", "time_beijing", "name", "major", "source"} <= row.keys()
+    assert row["name"] == "CPI · Inflation Rate YoY" and row["major"] is True
+    assert rows["other"]["name"] == "Existing Home Sales"
+    major = client.get("/api/macro-events/major?days=7")
+    assert major.status_code == 200 and major.json()[0]["category"] == "cpi"
+    assert client.get("/api/macro-events?days=0").status_code == 422
+    assert client.get("/api/macro-events?min_importance=4").status_code == 422
+    assert client.get("/api/macro-events/major?days=31").status_code == 422
+
+
+def test_major_macro_endpoint_excludes_released_events_but_full_table_keeps_them(
+    settings, store, monkeypatch,
+) -> None:
+    import copilot.web.app as web_app
+
+    fixed_now = datetime(2026, 10, 13, 16, 30, tzinfo=timezone.utc)
+
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now if tz is None else fixed_now.astimezone(tz)
+
+    monkeypatch.setattr(web_app, "datetime", FixedDatetime)
+    event_time = datetime(2026, 10, 13, 12, 30, tzinfo=timezone.utc)
+    store.replace_macro_events(
+        "tradingview", event_time - timedelta(days=1), event_time + timedelta(days=1),
+        [MacroEvent(
+            "tradingview", "released", event_time, "US",
+            "Inflation Rate YoY", "cpi", 3,
+        )],
+    )
+    pipeline_deps = deps(settings, store, market=None, model=None)
+    runtime = Runtime(settings, Secrets({}), store, pipeline_deps, RunManager(lambda trigger, slot: 0), None)
+    client = TestClient(create_app(runtime))
+    assert client.get("/api/macro-events?days=7").json()[0]["source"] == "tradingview"
+    assert client.get("/api/macro-events/major?days=7").json() == []
+
+
+def test_macro_event_table_deduplicates_configured_fomc_when_provider_row_exists(
+    settings, store,
+) -> None:
+    from zoneinfo import ZoneInfo
+
+    today = datetime.now(ZoneInfo("America/New_York")).date()
+    duplicate_day = today + timedelta(days=1)
+    fed_only_day = today + timedelta(days=2)
+    duplicate_time = datetime.combine(duplicate_day, datetime.min.time(), timezone.utc) + timedelta(hours=18)
+    fed_only_time = datetime.combine(fed_only_day, datetime.min.time(), timezone.utc) + timedelta(hours=18)
+    store.replace_macro_events(
+        "fed", duplicate_time - timedelta(days=1), fed_only_time + timedelta(days=1),
+        [
+            MacroEvent("fed", "configured-duplicate", duplicate_time, "US", "FOMC Rate Decision", "fomc_decision", 3),
+            MacroEvent("fed", "configured-only", fed_only_time, "US", "FOMC Rate Decision", "fomc_decision", 3),
+        ],
+    )
+    store.replace_macro_events(
+        "tradingview", duplicate_time - timedelta(days=1), duplicate_time + timedelta(days=1),
+        [MacroEvent(
+            "tradingview", "provider", duplicate_time, "US",
+            "Fed Interest Rate Decision", "fomc_decision", 3,
+        )],
+    )
+    pipeline_deps = deps(settings, store, market=None, model=None)
+    runtime = Runtime(settings, Secrets({}), store, pipeline_deps, RunManager(lambda trigger, slot: 0), None)
+    rows = TestClient(create_app(runtime)).get("/api/macro-events?days=7").json()
+    assert {(row["source"], row["title"]) for row in rows} == {
+        ("tradingview", "Fed Interest Rate Decision"),
+        ("fed", "FOMC Rate Decision"),
+    }
 
 
 def test_failing_cboe_symbol_falls_back_to_ibkr(settings, store) -> None:
@@ -337,7 +557,6 @@ def test_history_timeout_disables_history_for_the_rest_of_the_run(tmp_path) -> N
     import time as _time
 
     from copilot.config import load_settings
-    from copilot.store import Store
     from .conftest import FakeCboe
 
     settings = load_settings(local_path=tmp_path / "none.toml", overrides={
@@ -549,3 +768,164 @@ def test_tracking_chain_failure_counts_one_skip_reason(settings, store) -> None:
         settings=settings,
     )
     assert stage["skipped"] == {"SPY: CboeError": 1}
+
+
+def test_tracking_keeps_identical_news_and_macro_ideas_separate(settings, store) -> None:
+    from copilot.pipeline import _track
+
+    run_id = store.create_run(trading_date=NOW.date(), slot="event", trigger="event")
+    base = {
+        "symbol": "SPY",
+        "structure": "bull_call_spread",
+        "legs": [
+            {"expiry": (NOW.date() + timedelta(days=30)).isoformat(), "strike": 600.0,
+             "right": "C", "signed_quantity": 1},
+            {"expiry": (NOW.date() + timedelta(days=30)).isoformat(), "strike": 610.0,
+             "right": "C", "signed_quantity": -1},
+        ],
+    }
+
+    stage = _track(
+        store,
+        run_id=run_id,
+        ideas=[{**base, "origin": "news"}, {**base, "origin": "macro"}],
+        chains=None,
+        today=NOW.date(),
+        now=NOW,
+        slot="event",
+        trigger="event",
+        pricing="reference",
+        params_version="v1",
+        market_states={},
+        settings=settings,
+    )
+
+    rows = store.open_tracked()
+    assert stage["opened"] == 2
+    assert {row["origin"] for row in rows} == {"news", "macro"}
+    keys = {row["origin"]: row["idea_key"] for row in rows}
+    assert keys["news"].startswith("[")
+    assert keys["macro"].startswith("macro|[")
+
+
+def _seed_event_study(store: Store) -> None:
+    events = []
+    surprises = (-6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6)
+    for index, surprise in enumerate(surprises):
+        event_time = NOW - timedelta(days=(len(surprises) - 1 - index) * 28)
+        if index == len(surprises) - 1:
+            event_time = NOW - timedelta(minutes=30)
+        events.append(MacroEvent(
+            source="tradingview",
+            source_id=f"cpi-history-{index}",
+            event_time=event_time,
+            country="US",
+            title="Core Inflation Rate MoM",
+            category="cpi",
+            importance=3,
+            actual=str(surprise),
+            forecast="0",
+        ))
+    store.replace_macro_events(
+        "tradingview",
+        NOW - timedelta(days=400),
+        NOW + timedelta(days=1),
+        events,
+    )
+    store.replace_event_stats([{
+        "category": "cpi",
+        "symbol": "SPY",
+        "n": 18,
+        "last_event_date": NOW.date().isoformat(),
+        "event_abs_move": 0.018,
+        "normal_abs_move": 0.009,
+        "abs_move_ratio": 2.0,
+        "surprise_std": 3.0,
+        "after_label": "开盘后",
+        "mean_trailing_vol": 0.01,
+        "beta_gap": 0.2,
+        "se_gap": 0.05,
+        "t_gap": 4.0,
+        "beta_shrunk_gap": 0.15,
+        "beta_after": 1.2,
+        "se_after": 0.3,
+        "t_after": 4.0,
+        "beta_shrunk_after": 0.9,
+    }])
+
+
+def test_event_study_is_separate_and_main_top10_is_identical(settings, tmp_path) -> None:
+    from .conftest import FakeCboe
+
+    enabled_settings = replace(settings, data_dir=tmp_path / "enabled")
+    disabled_settings = replace(
+        settings,
+        data_dir=tmp_path / "disabled",
+        events=replace(settings.events, enabled=False),
+    )
+    enabled_store = Store(enabled_settings.database_path)
+    disabled_store = Store(disabled_settings.database_path)
+    try:
+        for target in (enabled_store, disabled_store):
+            seed_news(target)
+            _seed_event_study(target)
+        reason = {
+            "kind": "release",
+            "title": "美国 CPI 公布",
+            "category": "cpi",
+            "news_ids": [],
+            "at": NOW.isoformat(),
+        }
+        enabled_run = enabled_store.get_run(run_pipeline(
+            _cboe_deps(
+                enabled_settings,
+                enabled_store,
+                market=FakeMarket(SPOTS, unavailable=True),
+                cboe=FakeCboe(SPOTS),
+            ),
+            trigger="event",
+            slot="event",
+            reason=reason,
+        ))
+        disabled_run = disabled_store.get_run(run_pipeline(
+            _cboe_deps(
+                disabled_settings,
+                disabled_store,
+                market=FakeMarket(SPOTS, unavailable=True),
+                cboe=FakeCboe(SPOTS),
+            ),
+            trigger="event",
+            slot="event",
+            reason=reason,
+        ))
+
+        assert json.dumps(enabled_run["ideas"], sort_keys=True) == json.dumps(
+            disabled_run["ideas"], sort_keys=True
+        )
+        event_ideas = enabled_run["snapshots"]["event_ideas"]["list"]
+        assert event_ideas
+        assert all(idea["origin"] == "macro" for idea in event_ideas)
+        assert enabled_run["stages"]["event"] == reason
+        assert enabled_run["stages"]["event_study"]["ideas"] == len(event_ideas)
+        tracked = enabled_store.tracked_ideas(limit=None)
+        assert any(row["origin"] == "macro" for row in tracked)
+
+        runtime = Runtime(
+            enabled_settings,
+            Secrets({}),
+            enabled_store,
+            _cboe_deps(enabled_settings, enabled_store, market=None, cboe=FakeCboe(SPOTS)),
+            RunManager(lambda trigger, slot: 0),
+            None,
+        )
+        client = TestClient(create_app(runtime))
+        assert client.get("/api/event-study?category=cpi").json()[0]["symbol"] == "SPY"
+        latest = client.get("/api/event-study/latest")
+        assert latest.status_code == 200 and latest.json()["event"]["category"] == "cpi"
+        event_status = client.get("/api/status").json()["latest_event_run"]
+        assert event_status["id"] == enabled_run["id"]
+        assert event_status["reason"] == reason
+        assert event_status["event_ideas"] == len(event_ideas)
+    finally:
+        enabled_store.close()
+        disabled_store.close()

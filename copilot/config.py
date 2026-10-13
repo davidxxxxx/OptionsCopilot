@@ -5,6 +5,7 @@ import ipaddress
 import os
 import tomllib
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +39,45 @@ class NewsSettings:
     finnhub_company_news_symbols: int = 30
     finnhub_items_per_symbol: int = 5
     earnings_days_ahead: int = 10
+
+
+@dataclass(frozen=True)
+class CalendarSettings:
+    enabled: bool = True
+    days_ahead: int = 70
+    refresh_hours: float = 4.0
+    tradingview: bool = True
+    forexfactory: bool = True
+    fomc_decision_dates: tuple[date, ...] = (
+        date(2026, 1, 28), date(2026, 3, 18), date(2026, 4, 29), date(2026, 6, 17),
+        date(2026, 7, 29), date(2026, 9, 16), date(2026, 10, 28), date(2026, 12, 9),
+        date(2027, 1, 27), date(2027, 3, 17), date(2027, 4, 28), date(2027, 6, 9),
+        date(2027, 7, 28), date(2027, 9, 15), date(2027, 10, 27), date(2027, 12, 8),
+    )
+    catalyst_symbols: tuple[str, ...] = ("SPY", "QQQ", "IWM", "DIA", "TLT", "GLD")
+    banner_days: int = 7
+    alert_days: int = 3
+
+
+@dataclass(frozen=True)
+class EventSettings:
+    enabled: bool = True
+    fast_poll_seconds: int = 30
+    window_before_minutes: int = 2
+    window_after_minutes: int = 15
+    release_delay_minutes: int = 2
+    trigger_importance: int = 3
+    cooldown_minutes: int = 20
+    max_event_runs_per_day: int = 8
+    active_start_et: str = "07:00"
+    active_end_et: str = "20:00"
+    study_symbols: tuple[str, ...] = (
+        "SPY", "QQQ", "IWM", "DIA", "TLT", "GLD", "HYG", "XLF", "XLK", "XLE",
+        "XLU", "XLY", "XLP", "XLV", "XLI", "SMH", "KRE", "XHB",
+    )
+    min_events: int = 12
+    min_t: float = 2.0
+    shrink_k: float = 10.0
 
 
 @dataclass(frozen=True)
@@ -155,6 +195,8 @@ class Settings:
     ibkr: IbkrSettings
     options: OptionsSettings
     news: NewsSettings
+    calendar: CalendarSettings
+    events: EventSettings
     llm: LlmSettings
     views: ViewsSettings
     strategy: StrategySettings
@@ -212,6 +254,8 @@ def _build(raw: dict[str, Any]) -> Settings:
         ibkr=IbkrSettings(**raw.get("ibkr", {})),
         options=OptionsSettings(**raw.get("options", {})),
         news=NewsSettings(**raw.get("news", {})),
+        calendar=_calendar_settings(raw.get("calendar", {})),
+        events=_event_settings(raw.get("events", {})),
         llm=LlmSettings(**raw.get("llm", {})),
         views=_views_settings(raw.get("views", {})),
         strategy=StrategySettings(**raw.get("strategy", {})),
@@ -246,6 +290,15 @@ def _validate(settings: Settings) -> None:
         raise ValueError("views: need 0 < close_threshold < open_threshold")
     if len(views.importance_weights) != 4:
         raise ValueError("views.importance_weights needs 4 values (importance 0-3)")
+    events = settings.events
+    for value in (events.active_start_et, events.active_end_et):
+        hour, minute = (int(part) for part in value.split(":"))
+        if not (0 <= hour < 24 and 0 <= minute < 60):
+            raise ValueError(f"invalid event active time: {value}")
+    if events.active_start_et >= events.active_end_et:
+        raise ValueError("events active window is invalid")
+    if events.min_events < 2 or events.min_t < 0 or events.shrink_k < 0:
+        raise ValueError("events study settings are invalid")
     if not 0 <= strategy.tail_weight < 1:
         raise ValueError("strategy.tail_weight must be in [0, 1)")
     for moment in settings.schedule.run_times_et:
@@ -262,6 +315,22 @@ def _rules_settings(raw: dict[str, Any]) -> RulesSettings:
         if key in values:
             values[key] = tuple(float(v) for v in values[key])
     return RulesSettings(**values)
+
+
+def _calendar_settings(raw: dict[str, Any]) -> CalendarSettings:
+    values = dict(raw)
+    if "fomc_decision_dates" in values:
+        values["fomc_decision_dates"] = tuple(date.fromisoformat(str(value)) for value in values["fomc_decision_dates"])
+    if "catalyst_symbols" in values:
+        values["catalyst_symbols"] = _symbols(values["catalyst_symbols"])
+    return CalendarSettings(**values)
+
+
+def _event_settings(raw: dict[str, Any]) -> EventSettings:
+    values = dict(raw)
+    if "study_symbols" in values:
+        values["study_symbols"] = _symbols(values["study_symbols"])
+    return EventSettings(**values)
 
 
 def _views_settings(raw: dict[str, Any]) -> ViewsSettings:
@@ -301,6 +370,8 @@ def _merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
 
 
 __all__ = [
+    "CalendarSettings",
+    "EventSettings",
     "IbkrSettings",
     "LlmSettings",
     "NewsSettings",

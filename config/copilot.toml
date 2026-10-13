@@ -57,6 +57,47 @@ finnhub_company_news_symbols = 30
 finnhub_items_per_symbol = 5
 earnings_days_ahead = 10
 
+[calendar]
+# US macro calendar. TradingView is an unofficial primary source; ForexFactory supplies
+# the current week when TradingView fails. FOMC dates come from federalreserve.gov.
+enabled = true
+days_ahead = 70
+refresh_hours = 4.0
+tradingview = true
+forexfactory = true
+# FOMC meeting statement dates (second meeting day, 14:00 New York time).
+# Source: https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
+# Extend this list when the Federal Reserve publishes a new year's schedule.
+fomc_decision_dates = [
+  "2026-01-28", "2026-03-18", "2026-04-29", "2026-06-17",
+  "2026-07-29", "2026-09-16", "2026-10-28", "2026-12-09",
+  "2027-01-27", "2027-03-17", "2027-04-28", "2027-06-09",
+  "2027-07-28", "2027-09-15", "2027-10-27", "2027-12-08",
+]
+# Major macro events act as volatility catalysts only for these broad macro-sensitive ETFs.
+catalyst_symbols = ["SPY", "QQQ", "IWM", "DIA", "TLT", "GLD"]
+banner_days = 7
+alert_days = 3
+
+[events]
+enabled = true
+fast_poll_seconds = 30
+window_before_minutes = 2
+window_after_minutes = 15
+release_delay_minutes = 2
+trigger_importance = 3
+cooldown_minutes = 20
+max_event_runs_per_day = 8
+active_start_et = "07:00"
+active_end_et = "20:00"
+study_symbols = [
+  "SPY", "QQQ", "IWM", "DIA", "TLT", "GLD", "HYG", "XLF", "XLK", "XLE",
+  "XLU", "XLY", "XLP", "XLV", "XLI", "SMH", "KRE", "XHB",
+]
+min_events = 12
+min_t = 2.0
+shrink_k = 10.0
+
 [llm]
 enabled = true
 model = "deepseek-v4-flash"

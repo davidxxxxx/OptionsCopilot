@@ -171,6 +171,11 @@ def tracking_stats(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "by_edge_bucket": lambda row: _edge_bucket(
             _number(((row.get("entry") or {}).get("idea") or {}).get("return_on_risk"))
         ),
+        "by_macro_event": lambda row: (
+            "跨越重大事件"
+            if (((row.get("entry") or {}).get("idea") or {}).get("macro_events"))
+            else "不跨越"
+        ),
     }
     for name, key_fn in groupings.items():
         buckets: dict[str, list[Mapping[str, Any]]] = {}

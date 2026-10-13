@@ -6,6 +6,9 @@ const ENDPOINTS = Object.freeze({
   runs: "/api/runs",
   news: "/api/news",
   earnings: "/api/earnings",
+  macroEvents: "/api/macro-events",
+  majorMacroEvents: "/api/macro-events/major",
+  eventStudyLatest: "/api/event-study/latest",
   views: "/api/views",
   tracking: "/api/tracking",
   marketState: "/api/market-state",
@@ -21,10 +24,11 @@ const VOL_NAMES = Object.freeze({ expand: "波动放大", contract: "波动收�
 const RUN_STATUS = Object.freeze({ ok: "完成", partial: "部分完成", failed: "失败", running: "运行中" });
 const SOURCE_NAMES = Object.freeze({
   jin10: "金十", finnhub_market: "Finnhub 市场", finnhub_company: "Finnhub 公司", finnhub: "Finnhub", earnings: "财报日历",
+  tradingview: "TradingView", forexfactory: "ForexFactory", fed: "美联储",
 });
 const HOUR_NAMES = Object.freeze({ bmo: "盘前", amc: "盘后", dmh: "盘中" });
 
-const appState = { latestRunId: null, wasRunning: false, run: null, loaded: false, meta: null, tracking: null };
+const appState = { latestRunId: null, wasRunning: false, run: null, loaded: false, meta: null, tracking: null, status: null };
 
 function el(tag, options = {}, children = []) {
   const node = document.createElement(tag);
@@ -94,6 +98,7 @@ async function refreshStatus() {
     return;
   }
   setText("clock", `纽约 ${status.new_york} ｜ 北京 ${status.beijing}`);
+  appState.status = status;
   const chips = document.getElementById("chips");
   clear(chips);
   const latest = status.latest_run;
@@ -118,6 +123,8 @@ async function refreshStatus() {
   button.disabled = running;
   button.textContent = running ? "运行中…" : "立即运行";
   if (running) chips.appendChild(chip(`运行中（${status.running.trigger === "manual" ? "手动" : status.running.slot}）`, "warn"));
+  renderEventRunBanner(status.latest_event_run);
+  notifyEventRun(status.latest_event_run);
 
   const latestId = latest && latest.status !== "running" ? latest.id : null;
   if (!appState.loaded || latestId !== appState.latestRunId || (appState.wasRunning && !running)) {
@@ -137,9 +144,11 @@ async function refreshRun() {
   }
   renderRun();
   renderIdeas();
+  await refreshEventStudy();
   renderViews();
   renderPositions();
   await refreshTracking();
+  await refreshMajorEvents();
 }
 
 function stageBox(label, value, note, tone) {
@@ -244,13 +253,15 @@ function renderIdeas() {
   }
   empty.classList.add("hidden");
   for (const idea of ideas) {
+    const macroEvents = idea.macro_events || [];
+    const expiryTitle = macroEvents.length ? `到期前有：${macroEvents.map(macroEventText).join("、")}` : "";
     const row = el("tr", {}, [
       el("td", { text: idea.rank }),
       el("td", { className: idea.status === "new" ? "status-new" : "", text: idea.status === "new" ? "新增" : idea.status === "kept" ? "保持" : "—" }),
       el("td", { text: `${idea.symbol}${idea.indicative ? " *" : ""}${idea.origin === "ladder" ? " ⓡ" : ""}`, title: idea.origin === "ladder" ? "指数回撤阶梯规则" : idea.indicative ? "收盘参考价" : "" }),
       el("td", {}, [viewLabel(idea.view)]),
       el("td", { text: idea.structure_name }),
-      el("td", { text: `${idea.expiry.slice(5)}（${idea.dte}天）` }),
+      el("td", { text: `${idea.expiry.slice(5)}（${idea.dte}天）${macroEvents.length ? " ⚠" : ""}`, title: expiryTitle }),
       el("td", { className: "legs", text: idea.legs.map(legText).join(" / ") }),
       el("td", { className: "num", text: `${idea.net_premium >= 0 ? "付" : "收"} ${money(Math.abs(idea.net_premium))}` }),
       el("td", { className: "num neg", text: money(idea.max_loss) }),
@@ -264,6 +275,103 @@ function renderIdeas() {
     row.addEventListener("click", () => selectIdea(idea, row));
     body.appendChild(row);
   }
+}
+
+function appendCompactIdeaRow(body, idea) {
+  const macroEvents = idea.macro_events || [];
+  body.appendChild(el("tr", {}, [
+    el("td", { text: idea.rank }),
+    el("td", { text: idea.status === "new" ? "新增" : idea.status === "kept" ? "保持" : "—" }),
+    el("td", { text: idea.symbol }),
+    el("td", {}, [viewLabel(idea.view)]),
+    el("td", { text: idea.structure_name }),
+    el("td", { text: `${idea.expiry.slice(5)}（${idea.dte}天）${macroEvents.length ? " ⚠" : ""}` }),
+    el("td", { className: "legs", text: idea.legs.map(legText).join(" / ") }),
+    el("td", { className: "num", text: `${idea.net_premium >= 0 ? "付" : "收"} ${money(Math.abs(idea.net_premium))}` }),
+    el("td", { className: "num neg", text: money(idea.max_loss) }),
+    el("td", { className: "num pos", text: idea.max_profit === null ? "无上限" : money(idea.max_profit) }),
+    el("td", { className: "num", text: idea.reward_risk === null ? "∞" : idea.reward_risk.toFixed(2) }),
+    el("td", { text: (idea.breakevens || []).join(" / ") || "—" }),
+    el("td", { className: "num", text: `${percent(idea.view_pop)} / ${percent(idea.market_pop)}` }),
+    el("td", { className: `num ${idea.edge >= 0 ? "pos" : "neg"}`, text: `${money(idea.edge)}（${percent(idea.return_on_risk, 1)}）` }),
+    el("td", { className: "num", text: idea.suggested_quantity === null ? "—" : String(idea.suggested_quantity) }),
+  ]));
+}
+
+async function refreshEventStudy() {
+  const studyBody = document.querySelector("#event-study-table tbody");
+  const ideaBody = document.querySelector("#event-ideas-table tbody");
+  clear(studyBody);
+  clear(ideaBody);
+  const snapshots = appState.run ? appState.run.snapshots || {} : {};
+  const ideas = snapshots.event_ideas ? snapshots.event_ideas.list || [] : [];
+  for (const idea of ideas) appendCompactIdeaRow(ideaBody, idea);
+  document.getElementById("event-ideas-empty").classList.toggle("hidden", ideas.length > 0);
+  let payload = snapshots.event_study ? snapshots.event_study.latest : null;
+  let fallback = false;
+  if (!payload) {
+    try { payload = await getJson(ENDPOINTS.eventStudyLatest); } catch (error) { payload = null; }
+    fallback = true;
+  }
+  if (fallback && payload && payload.event) {
+    const eventTime = new Date(payload.event.time).getTime();
+    const age = Date.now() - eventTime;
+    if (!Number.isFinite(eventTime) || age < 0 || age > 3 * 24 * 60 * 60 * 1000) payload = null;
+  }
+  if (!payload || !payload.event) {
+    setText("event-study-head", "暂无近期重大事件测算。");
+    return;
+  }
+  const event = payload.event;
+  const prefix = fallback ? `${String(event.time_ny || "").slice(0, 5)} 的测算：` : "";
+  setText("event-study-head", `${prefix}美国 ${event.name}（${event.time_ny}）实际 ${event.actual ?? "—"} vs 预期 ${event.forecast ?? "—"}，${event.surprise_text}`);
+  for (const row of payload.rows || []) {
+    const expected = numberOrNull(row.expected_after_sigma);
+    const expectedPct = numberOrNull(row.expected_after_pct);
+    studyBody.appendChild(el("tr", {}, [
+      el("td", { text: row.symbol }),
+      el("td", { className: "num", text: row.n ?? "—" }),
+      el("td", { className: "num", text: numberOrNull(row.beta_shrunk_gap) === null ? "—" : `${Number(row.beta_shrunk_gap).toFixed(2)}σ` }),
+      el("td", { className: "num", text: numberOrNull(row.beta_shrunk_after) === null ? "—" : `${Number(row.beta_shrunk_after).toFixed(2)}σ` }),
+      el("td", { className: "num", text: numberOrNull(row.t_after) === null ? "—" : Number(row.t_after).toFixed(1) }),
+      el("td", { className: "num", text: expected === null ? "—" : `${expected.toFixed(2)}σ${expectedPct === null ? "" : ` / ${percent(expectedPct, 2)}`}` }),
+      el("td", { className: "num", text: numberOrNull(row.abs_move_ratio) === null ? "—" : Number(row.abs_move_ratio).toFixed(2) }),
+      el("td", { text: row.generated ? "是" : "否" }),
+    ]));
+  }
+}
+
+function renderEventRunBanner(eventRun) {
+  const banner = document.getElementById("event-run-banner");
+  if (!eventRun) {
+    banner.classList.add("hidden");
+    return;
+  }
+  const reason = eventRun.reason || {};
+  banner.textContent = `最近事件运行 #${eventRun.id}：${reason.title || "事件触发"}；主榜新增 ${eventRun.main_new_ideas}，事件组合 ${eventRun.event_ideas}`;
+  banner.classList.remove("hidden");
+}
+
+function notifyEventRun(eventRun) {
+  if (!eventRun || !("Notification" in window) || Notification.permission !== "granted") return;
+  const key = "copilot-last-event-notification";
+  if (localStorage.getItem(key) === String(eventRun.id)) return;
+  const reason = eventRun.reason || {};
+  new Notification("期权副驾：事件运行完成", {
+    body: `${reason.title || "重大事件"}；主榜新增 ${eventRun.main_new_ideas}，事件组合 ${eventRun.event_ideas}`,
+  });
+  localStorage.setItem(key, String(eventRun.id));
+}
+
+async function enableNotifications() {
+  const button = document.getElementById("notification-button");
+  if (!("Notification" in window)) {
+    button.textContent = "浏览器不支持提醒";
+    button.disabled = true;
+    return;
+  }
+  const permission = await Notification.requestPermission();
+  button.textContent = permission === "granted" ? "事件提醒已开启" : "事件提醒未开启";
 }
 
 function renderPositionAlerts(run) {
@@ -316,6 +424,9 @@ function selectIdea(idea, row) {
   if (idea.portfolio_ok === false) tags.push(el("span", { className: "tag warn", text: `超出组合剩余风险额度（剩余 ${money(idea.portfolio_remaining)}）` }));
   if (idea.same_direction) tags.push(el("span", { className: "tag warn", text: "与现有持仓同向，风险叠加" }));
   if (idea.exceeds_budget) tags.push(el("span", { className: "tag warn", text: "1 张即超单笔风险预算" }));
+  if ((idea.macro_events || []).length) {
+    tags.push(el("span", { className: "tag warn", text: `到期前有：${idea.macro_events.map(macroEventText).join("、")}` }));
+  }
   const left = el("div", {}, [
     el("h3", { text: `${idea.symbol} ${idea.structure_name} ｜ 现价 ${idea.spot}` }),
     el("p", {}, tags),
@@ -621,7 +732,7 @@ async function refreshRuns() {
       el("td", { text: run.id }),
       el("td", { text: run.trading_date }),
       el("td", { text: run.slot === "manual" ? "手动" : run.slot }),
-      el("td", { text: run.trigger === "schedule" ? "自动" : "手动" }),
+      el("td", { text: run.trigger === "schedule" ? "自动" : run.trigger === "event" ? "事件" : "手动" }),
       el("td", { className: run.status === "ok" ? "pos" : run.status === "failed" ? "neg" : "", text: RUN_STATUS[run.status] || run.status }),
       el("td", { text: run.ibkr || "—" }),
       el("td", { text: { ledger: "账本", llm: "模型", reused: "复用", fallback: "兜底" }[run.views] || run.views || "—" }),
@@ -678,6 +789,52 @@ async function refreshEarnings() {
   }
 }
 
+function macroEventText(event) {
+  return `${event.name} ${String(event.date || "").slice(5)}`;
+}
+
+async function refreshMajorEvents() {
+  const banner = document.getElementById("major-events-banner");
+  let events = [];
+  try { events = await getJson(`${ENDPOINTS.majorMacroEvents}?days=7`); } catch (error) { events = []; }
+  banner.textContent = events.length ? `未来 7 天重大事件：${events.map(macroEventText).join(" · ")}` : "";
+  banner.classList.toggle("hidden", events.length === 0);
+}
+
+async function refreshMacroEvents() {
+  const days = document.getElementById("calendar-days").value;
+  const importance = document.getElementById("calendar-importance").value;
+  const params = new URLSearchParams({ days });
+  if (importance !== "major") params.set("min_importance", importance);
+  let events = [];
+  try { events = await getJson(`${ENDPOINTS.macroEvents}?${params.toString()}`); } catch (error) { return; }
+  if (importance === "major") events = events.filter((event) => event.major);
+  const body = document.querySelector("#macro-events-table tbody");
+  clear(body);
+  document.getElementById("macro-events-empty").classList.toggle("hidden", events.length > 0);
+  for (const event of events) {
+    body.appendChild(el("tr", { className: event.major ? "macro-major" : "" }, [
+      el("td", { text: event.time_beijing }),
+      el("td", { text: event.time_ny }),
+      el("td", { text: event.name, title: event.title }),
+      el("td", { text: event.period || "—" }),
+      el("td", { text: "★".repeat(event.importance || 0) || "—" }),
+      el("td", { text: event.forecast ?? "—" }),
+      el("td", { text: event.previous ?? "—" }),
+      el("td", { text: event.actual ?? "—" }),
+      el("td", { text: ["SPY", "QQQ", "TLT"].map((symbol) => {
+        const ratio = numberOrNull((event.abs_move_ratios || {})[symbol]);
+        return `${symbol} ${ratio === null ? "—" : ratio.toFixed(2)}`;
+      }).join(" / ") }),
+      el("td", { text: SOURCE_NAMES[event.source] || event.source }),
+    ]));
+  }
+}
+
+async function refreshCalendar() {
+  await Promise.all([refreshMacroEvents(), refreshEarnings()]);
+}
+
 async function triggerRun() {
   const button = document.getElementById("run-button");
   button.disabled = true;
@@ -695,18 +852,21 @@ function switchTab(name) {
   document.querySelectorAll(".tab").forEach((s) => s.classList.toggle("active", s.id === `tab-${name}`));
   if (name === "news") refreshNews();
   if (name === "views") refreshViews();
-  if (name === "earnings") refreshEarnings();
+  if (name === "earnings") refreshCalendar();
   if (name === "tracking") refreshTracking();
   if (name === "runs") refreshRuns();
 }
 
 document.getElementById("run-button").addEventListener("click", triggerRun);
+document.getElementById("notification-button").addEventListener("click", enableNotifications);
 document.getElementById("news-source").addEventListener("change", refreshNews);
 document.getElementById("news-importance").addEventListener("change", refreshNews);
 document.getElementById("news-category").addEventListener("change", refreshNews);
 document.getElementById("news-symbol").addEventListener("change", refreshNews);
 document.getElementById("tracking-status").addEventListener("change", refreshTracking);
 document.getElementById("tracking-group").addEventListener("change", () => renderTrackingGroups((appState.tracking || {}).stats || {}));
+document.getElementById("calendar-importance").addEventListener("change", refreshMacroEvents);
+document.getElementById("calendar-days").addEventListener("change", refreshMacroEvents);
 document.querySelectorAll("#tabs button").forEach((button) => button.addEventListener("click", () => switchTab(button.dataset.tab)));
 
 refreshStatus();

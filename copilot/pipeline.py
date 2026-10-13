@@ -12,12 +12,13 @@ import math
 import threading
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
 from copilot.analysis.models import View
+from copilot.analysis.event_study import build_macro_views
 from copilot.analysis.brief import needs_refresh, write_brief
 from copilot.analysis.ladder import LadderSignal, ladder_signal, ladder_view
 from copilot.analysis.ledger import score_news, update_ledger
@@ -30,6 +31,7 @@ from copilot.market.ibkr import IbkrUnavailable
 from copilot.market.models import AccountSnapshot, ChainInfo, OptionChain, OptionQuote, Underlying
 from copilot.market.state import market_state
 from copilot.news.collect import NewsSources, collect_news
+from copilot.news.macro_calendar import group_major
 from copilot.params import params_payload, params_version
 from copilot.store import Store
 from copilot.strategies.builder import (
@@ -89,16 +91,24 @@ class PipelineDeps:
     market_factory: Callable[[], MarketSource] | None
     clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)
     option_source: OptionChainSource | None = None
-    # Daily closes for the index ladder: (symbol, today) -> [(date, close)], oldest first.
+    # Daily closes for any symbol: (symbol, today) -> [(date, close)], oldest first.
     index_history: Callable[[str, date], list[tuple[date, float]]] | None = None
 
 
-def run_pipeline(deps: PipelineDeps, *, trigger: str, slot: str) -> int:
+def run_pipeline(
+    deps: PipelineDeps,
+    *,
+    trigger: str,
+    slot: str,
+    reason: dict[str, Any] | None = None,
+) -> int:
     settings, store = deps.settings, deps.store
     now = deps.clock()
     today = now.astimezone(NEW_YORK).date()
     run_id = store.create_run(trading_date=today, slot=slot, trigger=trigger)
     stages: dict[str, Any] = {}
+    if trigger == "event" or reason is not None:
+        stages["event"] = reason
     timings: dict[str, float] = {}
     market: MarketSource | None = None
     macro_summary = ""
@@ -116,12 +126,37 @@ def run_pipeline(deps: PipelineDeps, *, trigger: str, slot: str) -> int:
         )
         if deps.news_sources is not None:
             results = collect_news(
-                settings, store, deps.news_sources, now=now, company_symbols=company_symbols,
+                settings,
+                store,
+                deps.news_sources,
+                now=now,
+                company_symbols=company_symbols,
+                include_company_news=trigger != "event",
+                force_calendar=trigger == "event",
+                calendar_start=today - timedelta(days=1) if trigger == "event" else None,
+                calendar_end=today + timedelta(days=1) if trigger == "event" else None,
             )
             stages["news"] = [asdict(result) for result in results]
         else:
             stages["news"] = []
         timings["news"] = time.monotonic() - started
+        macro_start, macro_end = _macro_window(today, settings.calendar.days_ahead)
+        macro_events = store.macro_events_between(macro_start, macro_end)
+        upcoming_macro_events = [event for event in macro_events if event.event_time > now]
+        major = group_major(
+            upcoming_macro_events,
+            start=today,
+            end=today + timedelta(days=settings.calendar.days_ahead),
+        )
+        major_banner = [
+            event for event in major
+            if date.fromisoformat(event["date"]) <= today + timedelta(days=settings.calendar.banner_days)
+        ]
+        major_alerts = [
+            event for event in major
+            if date.fromisoformat(event["date"]) <= today + timedelta(days=settings.calendar.alert_days)
+        ]
+        stages["calendar"] = {"major_next_days": major_banner, "events": len(macro_events)}
         store.update_run_stages(run_id, stages)
 
         # 2. Broker: account and underlying prices ----------------------------
@@ -165,7 +200,17 @@ def run_pipeline(deps: PipelineDeps, *, trigger: str, slot: str) -> int:
         store.replace_view_book(ledger.book, ledger.changes, run_id=run_id)
         views = ledger.views
         store.save_views(run_id, (ledger.book.get(s) or view.to_dict() for s, view in views.items()))
-        macro_summary, stages["brief"] = _refresh_brief(store, llm, tagged, now)
+        macro_views: dict[tuple[str, str], View] = {}
+        event_study: dict[str, Any] | None = None
+        if settings.events.enabled:
+            history_start = datetime.combine(date(2021, 1, 1), datetime.min.time(), NEW_YORK)
+            macro_views, event_study = build_macro_views(
+                store.macro_events_between(history_start, now + timedelta(days=1)),
+                store.event_stats(),
+                now=now,
+                settings=settings.events,
+            )
+        macro_summary, stages["brief"] = _refresh_brief(store, llm, tagged, now, major_banner)
         stages["views"] = {
             "status": "ledger",
             "count": len(views),
@@ -177,9 +222,14 @@ def run_pipeline(deps: PipelineDeps, *, trigger: str, slot: str) -> int:
         store.update_run_stages(run_id, stages)
 
         # 3b. Rules: index drawdown ladder and the open-position book ------------
-        ladder_signals = _ladder_signals(store, deps, settings, today)
+        history = _History(
+            market, store, today, settings.ibkr.history_timeout_seconds, deps.index_history
+        )
+        ladder_signals = _ladder_signals(history, settings)
         rule_views = {
-            view.symbol: view for signal in ladder_signals if (view := ladder_view(signal, settings.rules))
+            ("ladder", view.symbol): view
+            for signal in ladder_signals
+            if (view := ladder_view(signal, settings.rules))
         }
         stages["rules"] = {"ladder": [signal.to_dict() for signal in ladder_signals]}
         groups = group_positions(account.positions) if account else []
@@ -187,6 +237,9 @@ def run_pipeline(deps: PipelineDeps, *, trigger: str, slot: str) -> int:
         # 4. Option analysis ---------------------------------------------------
         started = time.monotonic()
         ideas: list[dict[str, Any]] = []
+        event_ideas: list[dict[str, Any]] = []
+        macro_candidates: list[Candidate] = []
+        macro_failures: dict[str, str] = {}
         chains = _ChainCache(deps.option_source) if deps.option_source is not None else None
         event_dates: dict[str, list[date]] = {}
         for event in earnings:
@@ -202,7 +255,6 @@ def run_pipeline(deps: PipelineDeps, *, trigger: str, slot: str) -> int:
                 keep=[idea["symbol"] for idea in previous],
             )
             live_session = is_regular_session(deps.clock())
-            history = _History(market, store, today, settings.ibkr.history_timeout_seconds)
             previous_by_symbol: dict[str, list[dict[str, Any]]] = {}
             for idea in previous:
                 previous_by_symbol.setdefault(idea["symbol"], []).append(idea)
@@ -216,12 +268,14 @@ def run_pipeline(deps: PipelineDeps, *, trigger: str, slot: str) -> int:
             for symbol in symbols:
                 view = views[symbol]
                 events = event_dates.get(symbol, ())
+                catalysts = _macro_dates(major) if symbol in settings.calendar.catalyst_symbols else ()
                 found: list[Candidate] | None = None
                 reason = ""
                 if chains is not None:
                     try:
                         found, underlyings[symbol] = _analyze_chain(
                             chains, symbol, view, settings, history, today=today, event_dates=events,
+                            catalyst_dates=catalysts,
                             previous=[i for i in previous_by_symbol.get(symbol, ()) if i.get("origin") != "ladder"],
                         )
                         used[symbol] = "cboe"
@@ -240,7 +294,8 @@ def run_pipeline(deps: PipelineDeps, *, trigger: str, slot: str) -> int:
                         underlyings[symbol] = history.enrich(underlying)
                         found = _analyze_symbol(
                             market, underlyings[symbol], view, settings,
-                            today=today, event_dates=events, live_session=live_session,
+                            today=today, event_dates=events, catalyst_dates=catalysts,
+                            live_session=live_session,
                         )
                         used[symbol] = "ibkr"
                         consecutive_timeouts = 0
@@ -264,11 +319,14 @@ def run_pipeline(deps: PipelineDeps, *, trigger: str, slot: str) -> int:
                 else:
                     candidates.extend(found)
             # Rule views (index ladder) are analysed on their own, labelled by origin.
-            for symbol, rule_view in rule_views.items() if chains is not None else ():
+            for (_origin, symbol), rule_view in rule_views.items() if chains is not None else ():
                 try:
                     found, _underlying = _analyze_chain(
                         chains, symbol, rule_view, settings, history, today=today,
                         event_dates=event_dates.get(symbol, ()),
+                        catalyst_dates=(
+                            _macro_dates(major) if symbol in settings.calendar.catalyst_symbols else ()
+                        ),
                         previous=[i for i in previous_by_symbol.get(symbol, ()) if i.get("origin") == "ladder"],
                     )
                     candidates.extend(found)
@@ -293,7 +351,40 @@ def run_pipeline(deps: PipelineDeps, *, trigger: str, slot: str) -> int:
                 except Exception as exc:
                     log.warning("live re-quote failed: %s", exc)
                     live_check = {"status": "failed", "detail": f"{type(exc).__name__}: {exc}"[:200]}
+            _attach_macro_events(ideas, major, today)
             store.save_ideas(run_id, ideas)
+            if chains is not None:
+                for (_origin, symbol), macro_view in macro_views.items():
+                    try:
+                        found, _underlying = _analyze_chain(
+                            chains,
+                            symbol,
+                            macro_view,
+                            settings,
+                            history,
+                            today=today,
+                            event_dates=event_dates.get(symbol, ()),
+                            catalyst_dates=(
+                                _macro_dates(major)
+                                if symbol in settings.calendar.catalyst_symbols
+                                else ()
+                            ),
+                            previous=(),
+                        )
+                        macro_candidates.extend(found)
+                    except Exception as exc:
+                        macro_failures[symbol] = str(exc)[:160]
+            if macro_candidates:
+                event_ideas = rank_candidates(
+                    macro_candidates,
+                    views={},
+                    settings=replace(settings.strategy, max_ideas=5),
+                    account=account,
+                    previous=(),
+                    rule_views=macro_views,
+                    portfolio=risk,
+                )
+                _attach_macro_events(event_ideas, major, today)
             states: dict[str, dict[str, Any]] = {}
             try:
                 if not is_trading_day(today):
@@ -324,7 +415,7 @@ def run_pipeline(deps: PipelineDeps, *, trigger: str, slot: str) -> int:
                 stages["tracking"] = _track(
                     store,
                     run_id=run_id,
-                    ideas=ideas,
+                    ideas=[*ideas, *event_ideas],
                     chains=chains,
                     today=today,
                     now=now,
@@ -354,22 +445,35 @@ def run_pipeline(deps: PipelineDeps, *, trigger: str, slot: str) -> int:
                 "symbols": symbols,
                 "candidates": len(candidates),
                 "ideas": len(ideas),
+                "event_candidates": len(macro_candidates),
+                "event_ideas": len(event_ideas),
+                "event_skipped": macro_failures,
                 "loss_cap": round(cap, 2) if cap is not None else None,
                 "over_cap": over_cap,
                 "live_check": live_check,
                 "previous_ideas": len(previous),
                 "dropped": dropped,
                 "history": "unavailable" if history.disabled else "ok",
+                "closes": history.closes_source,
                 "missing_contracts": getattr(market, "missing_contracts", 0),
                 "skipped": failures,
                 "warnings": market.warnings[:30] if market is not None else [],
             }
+        store.save_snapshot(run_id, "event_ideas", "list", event_ideas)
+        if event_study is not None:
+            store.save_snapshot(run_id, "event_study", "latest", event_study)
+        stages["event_study"] = {
+            "status": "ok" if event_study is not None else "none",
+            "views": len(macro_views),
+            "ideas": len(event_ideas),
+        }
         for symbol, underlying in underlyings.items():
             store.save_snapshot(run_id, "underlying", symbol, _underlying_dict(underlying))
         if account is not None:
             for group in groups:
                 group.alerts = exit_alerts(
                     group, today=today, rules=settings.rules, earnings=event_dates.get(group.symbol, ()),
+                    macro_events=major_alerts,
                     view=views.get(group.symbol), net_liquidation=account.net_liquidation,
                 )
             store.save_snapshot(run_id, "positions", "book", {
@@ -437,7 +541,11 @@ def tag_pending_news(store: Store, llm: JsonModel | None, settings: Settings, *,
 
 
 def _refresh_brief(
-    store: Store, llm: JsonModel | None, tagged: Sequence[Any], now: datetime
+    store: Store,
+    llm: JsonModel | None,
+    tagged: Sequence[Any],
+    now: datetime,
+    upcoming: Sequence[dict[str, Any]],
 ) -> tuple[str, dict[str, Any]]:
     state = store.get_kv("macro_brief")
     important = [
@@ -446,13 +554,42 @@ def _refresh_brief(
     ]
     if llm is not None and needs_refresh(state, important):
         try:
-            state, usage = write_brief(llm, important, now=now)
+            state, usage = write_brief(llm, important, now=now, upcoming=upcoming)
             store.set_kv("macro_brief", state)
             return state["text"], {"status": "updated", "items": len(important), "usage": usage}
         except Exception as exc:
             log.warning("macro brief failed: %s", exc)
             return (state or {}).get("text", ""), {"status": "failed", "detail": str(exc)[:200]}
     return (state or {}).get("text", ""), {"status": "reused" if state else "none"}
+
+
+def _macro_window(today: date, days_ahead: int) -> tuple[datetime, datetime]:
+    start = datetime.combine(today, datetime.min.time(), NEW_YORK).astimezone(timezone.utc)
+    end_day = today + timedelta(days=days_ahead + 1)
+    end = datetime.combine(end_day, datetime.min.time(), NEW_YORK).astimezone(timezone.utc)
+    return start, end
+
+
+def _macro_dates(events: Sequence[dict[str, Any]]) -> tuple[date, ...]:
+    return tuple(date.fromisoformat(event["date"]) for event in events)
+
+
+def _attach_macro_events(
+    ideas: Sequence[dict[str, Any]], events: Sequence[dict[str, Any]], today: date
+) -> None:
+    for idea in ideas:
+        expiries = [date.fromisoformat(leg["expiry"]) for leg in idea.get("legs", ())]
+        if not expiries and idea.get("expiry"):
+            expiries = [date.fromisoformat(idea["expiry"])]
+        if not expiries:
+            idea["macro_events"] = []
+            continue
+        front = min(expiries)
+        idea["macro_events"] = [
+            {key: event[key] for key in ("date", "category", "name")}
+            for event in events
+            if today <= date.fromisoformat(event["date"]) <= front
+        ]
 
 
 def _analysis_symbols(
@@ -486,6 +623,7 @@ def _analyze_chain(
     *,
     today: date,
     event_dates: Sequence[date],
+    catalyst_dates: Sequence[date] = (),
     previous: Sequence[dict[str, Any]] = (),
 ) -> tuple[list[Candidate], Underlying]:
     chain = chains.chain(symbol)
@@ -513,7 +651,8 @@ def _analyze_chain(
     option_chain = OptionChain(underlying=underlying, quotes=quotes)
     # CBOE carries real bid/ask even when the market is closed (the closing snapshot).
     found = build_candidates(
-        view, option_chain, settings.strategy, today=today, event_dates=event_dates, expiries=expiries,
+        view, option_chain, settings.strategy, today=today, event_dates=event_dates,
+        catalyst_dates=catalyst_dates, expiries=expiries,
     )
     keys = {candidate_key(candidate) for candidate in found}
     for idea in previous:
@@ -525,6 +664,7 @@ def _analyze_chain(
                 for leg in idea["legs"]
             ],
             event_dates=event_dates,
+            catalyst_dates=catalyst_dates,
         )
         if rebuilt is not None and candidate_key(rebuilt) not in keys:
             found.append(rebuilt)
@@ -635,7 +775,10 @@ def _track(
         if idea.get("indicative"):
             skipped_indicative += 1
             continue
+        origin = idea.get("origin") or "news"
         key = json.dumps(idea_key(idea), ensure_ascii=False, separators=(",", ":"))
+        if origin not in {"news", "ladder"}:
+            key = f"{origin}|{key}"
         existing = store.find_open_tracked(key)
         if existing is not None:
             store.touch_tracked(existing["id"], run_id)
@@ -645,7 +788,7 @@ def _track(
             idea_key=key,
             symbol=idea["symbol"],
             structure=idea["structure"],
-            origin=idea.get("origin") or "news",
+            origin=origin,
             params_version=params_version,
             entry_run_id=run_id,
             entered_at=now.isoformat(),
@@ -698,20 +841,10 @@ def _tracking_exit_payload(
     }
 
 
-def _ladder_signals(store: Store, deps: PipelineDeps, settings: Settings, today: date) -> list[LadderSignal]:
+def _ladder_signals(history: "_History", settings: Settings) -> list[LadderSignal]:
     signals = []
     for symbol in settings.rules.ladder_symbols:
-        closes = store.get_daily_cache(symbol, "NASDAQ_CLOSE", today)
-        if closes is None and deps.index_history is not None:
-            try:
-                fetched = deps.index_history(symbol, today)
-            except Exception as exc:
-                log.warning("index history for %s failed: %s", symbol, exc)
-                fetched = []
-            closes = [[day.isoformat(), close] for day, close in fetched]
-            if closes:
-                store.put_daily_cache(symbol, "NASDAQ_CLOSE", today, closes)
-        parsed = [(date.fromisoformat(day), float(close)) for day, close in closes or ()]
+        parsed = history.nasdaq_closes(symbol)
         signal = ladder_signal(symbol, parsed, settings.rules)
         if signal is not None:
             signals.append(signal)
@@ -765,6 +898,7 @@ def _analyze_symbol(
     *,
     today: date,
     event_dates: Sequence[date],
+    catalyst_dates: Sequence[date] = (),
     live_session: bool,
 ) -> list[Candidate]:
     info = market.chain_info(underlying.symbol)
@@ -783,30 +917,74 @@ def _analyze_symbol(
     chain = OptionChain(underlying=underlying, quotes=tuple(quotes))
     return build_candidates(
         view, chain, settings.strategy, today=today, event_dates=event_dates,
+        catalyst_dates=catalyst_dates,
         indicative_prices=not live_session,
     )
 
 
 class _History:
-    """Daily bars from the per-day cache or IBKR.
+    """Nasdaq-first daily closes plus IBKR-only IV history.
 
     History only refines vol estimates, so after one IBKR history timeout (its historical
     farm can be down for hours) the rest of the run uses the cache only.
     """
 
     def __init__(
-        self, market: MarketSource | None, store: Store, today: date, timeout_seconds: float
+        self,
+        market: MarketSource | None,
+        store: Store,
+        today: date,
+        timeout_seconds: float,
+        index_history: Callable[[str, date], list[tuple[date, float]]] | None,
     ) -> None:
         self.market = market
         self.store = store
         self.today = today
         self.timeout_seconds = timeout_seconds
         self.disabled = market is None
+        self.index_history = index_history
+        self.nasdaq_failures = 0
+        self.nasdaq_disabled = index_history is None
+        self.close_sources: list[str] = []
+
+    @property
+    def closes_source(self) -> str:
+        if not self.close_sources:
+            return "unavailable"
+        return max(set(self.close_sources), key=lambda value: (self.close_sources.count(value), -self.close_sources.index(value)))
+
+    def nasdaq_closes(self, symbol: str) -> list[tuple[date, float]]:
+        cached = self.store.get_daily_cache(symbol, "NASDAQ_CLOSE", self.today)
+        if cached is not None:
+            self.close_sources.append("cache")
+            return [(date.fromisoformat(day), float(close)) for day, close in cached]
+        if self.nasdaq_disabled:
+            return []
+        try:
+            fetched = self.index_history(symbol, self.today) if self.index_history else []
+        except Exception as exc:
+            log.warning("Nasdaq history for %s failed: %s", symbol, exc)
+            fetched = []
+        if fetched:
+            self.nasdaq_failures = 0
+            payload = [[day.isoformat(), close] for day, close in fetched]
+            self.store.put_daily_cache(symbol, "NASDAQ_CLOSE", self.today, payload)
+            self.close_sources.append("nasdaq")
+            return fetched
+        self.nasdaq_failures += 1
+        if self.nasdaq_failures >= 2:
+            self.nasdaq_disabled = True
+        return []
 
     def enrich(self, underlying: Underlying, *, keep_iv30: bool = False) -> Underlying:
-        values: dict[str, list[float]] = {}
+        nasdaq = self.nasdaq_closes(underlying.symbol)
+        values: dict[str, list[float]] = {"NASDAQ_CLOSE": [close for _, close in nasdaq]}
         for what in ("TRADES", "OPTION_IMPLIED_VOLATILITY"):
+            if what == "TRADES" and nasdaq:
+                values[what] = []
+                continue
             bars = self.store.get_daily_cache(underlying.symbol, what, self.today)
+            cached = bars is not None
             if bars is None and not self.disabled:
                 started = time.monotonic()
                 try:
@@ -815,10 +993,14 @@ class _History:
                     bars = None
                 if bars:
                     self.store.put_daily_cache(underlying.symbol, what, self.today, bars)
+                    if what == "TRADES":
+                        self.close_sources.append("ibkr")
                 elif time.monotonic() - started >= self.timeout_seconds - 0.5:
                     log.warning("IBKR history timed out (%s %s); skipping history for this run",
                                 underlying.symbol, what)
                     self.disabled = True
+            if what == "TRADES" and bars and not nasdaq and cached:
+                self.close_sources.append("cache")
             values[what] = [close for _, close in bars or ()]
         enriched = _with_history(underlying, values)
         if keep_iv30 and underlying.iv30:
@@ -828,16 +1010,20 @@ class _History:
 
 def _attach_cached_history(store: Store, underlyings: dict[str, Underlying], today: date) -> None:
     for symbol, underlying in list(underlyings.items()):
+        nasdaq = store.get_daily_cache(symbol, "NASDAQ_CLOSE", today) or ()
         values = {
-            what: [close for _, close in (store.get_daily_cache(symbol, what, today) or ())]
-            for what in ("TRADES", "OPTION_IMPLIED_VOLATILITY")
+            "NASDAQ_CLOSE": [close for _, close in nasdaq],
+            "TRADES": [close for _, close in (store.get_daily_cache(symbol, "TRADES", today) or ())],
+            "OPTION_IMPLIED_VOLATILITY": [
+                close for _, close in (store.get_daily_cache(symbol, "OPTION_IMPLIED_VOLATILITY", today) or ())
+            ],
         }
         if any(values.values()):
             underlyings[symbol] = _with_history(underlying, values)
 
 
 def _with_history(underlying: Underlying, values: dict[str, list[float]]) -> Underlying:
-    closes = values.get("TRADES") or []
+    closes = values.get("NASDAQ_CLOSE") or values.get("TRADES") or []
     iv_now, iv_rank, iv_percentile = iv_rank_and_percentile(values.get("OPTION_IMPLIED_VOLATILITY") or [])
     return underlying.with_history(
         iv30=iv_now if iv_now and math.isfinite(iv_now) else underlying.iv30,

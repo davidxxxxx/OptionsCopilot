@@ -192,6 +192,34 @@ def test_earnings_gate_blocks_short_premium_spanning_earnings() -> None:
         neutral, chain, relaxed, today=TODAY, event_dates=earnings)}
 
 
+def test_macro_catalyst_keeps_expand_view_in_long_vol_structures() -> None:
+    chain = make_chain(spot=600, iv=0.18)
+    expanding = view("neutral", conviction=3, move=0.0, vol="expand")
+    without = {candidate.structure for candidate in build_candidates(
+        expanding, chain, SETTINGS, today=TODAY,
+    )}
+    with_macro = {candidate.structure for candidate in build_candidates(
+        expanding, chain, SETTINGS, today=TODAY,
+        catalyst_dates=[TODAY + timedelta(days=10)],
+    )}
+    assert not without & {"long_straddle", "long_strangle"}
+    assert with_macro and with_macro <= {"long_straddle", "long_strangle"}
+
+
+def test_macro_catalyst_does_not_trigger_earnings_short_premium_gate() -> None:
+    chain = make_chain(spot=600, iv=0.25, hv20=0.12)
+    neutral = view("neutral", conviction=1, move=0.0)
+    macro = [TODAY + timedelta(days=10)]
+    structures = {candidate.structure for candidate in build_candidates(
+        neutral, chain, SETTINGS, today=TODAY, catalyst_dates=macro,
+    )}
+    earnings = {candidate.structure for candidate in build_candidates(
+        neutral, chain, SETTINGS, today=TODAY, event_dates=macro,
+    )}
+    assert "iron_condor" in structures
+    assert "iron_condor" not in earnings
+
+
 def test_view_can_pin_structures_and_expiry_window() -> None:
     expiries = (TODAY + timedelta(days=21), TODAY + timedelta(days=120))
     chain = make_chain(spot=600, iv=0.2, expiries=expiries)

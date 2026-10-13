@@ -1,7 +1,7 @@
 """Local GUI/API. Loopback only: there is no authentication layer."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from copilot.analysis.ledger import ACTION_NAMES
 from copilot.analysis.tagging import CATEGORIES
 from copilot.market.state import with_own_rank
+from copilot.news.macro_calendar import CATEGORY_NAMES, MAJOR_CATEGORIES, MacroEvent, group_major
 from copilot.runtime import Runtime
 from copilot.strategies.tracking import tracking_stats
 
@@ -31,6 +32,8 @@ def create_app(runtime: Runtime) -> FastAPI:
         now = datetime.now(timezone.utc)
         runs = store.list_runs(limit=1)
         latest = runs[0] if runs else None
+        latest_event = store.latest_run_by_trigger("event")
+        latest_event_detail = store.get_run(latest_event["id"]) if latest_event else None
         return {
             "now": now.isoformat(timespec="seconds"),
             "new_york": now.astimezone(NEW_YORK).strftime("%Y-%m-%d %H:%M"),
@@ -38,6 +41,23 @@ def create_app(runtime: Runtime) -> FastAPI:
             "schedule": runtime.scheduler.status() if runtime.scheduler else {"enabled": False},
             "running": runtime.runs.current,
             "latest_run": _run_summary(latest) if latest else None,
+            "latest_event_run": (
+                {
+                    "id": latest_event["id"],
+                    "reason": (latest_event.get("stages") or {}).get("event"),
+                    "status": latest_event["status"],
+                    "finished_at": latest_event["finished_at"],
+                    "main_new_ideas": sum(
+                        idea.get("status") != "kept"
+                        for idea in (latest_event_detail or {}).get("ideas", ())
+                    ),
+                    "event_ideas": len(
+                        (((latest_event_detail or {}).get("snapshots") or {}).get("event_ideas") or {}).get("list", ())
+                    ),
+                }
+                if latest_event
+                else None
+            ),
             "secrets": runtime.secrets.configured(),
             "ibkr": {"host": settings.ibkr.host, "port": settings.ibkr.port},
             "llm": {"enabled": settings.llm.enabled, "model": settings.llm.model},
@@ -104,6 +124,62 @@ def create_app(runtime: Runtime) -> FastAPI:
             for e in store.earnings_between(today, today + timedelta(days=days))
             if e.symbol in universe
         ]
+
+    @app.get("/api/macro-events")
+    def macro_events(
+        days: int = Query(14, ge=1, le=120),
+        min_importance: int = Query(0, ge=0, le=3),
+    ) -> list[dict[str, Any]]:
+        today = datetime.now(NEW_YORK).date()
+        start, end = _date_window(today, days)
+        rows = store.macro_events_between(start, end, min_importance=min_importance)
+        alternate_fomc_dates = {
+            event.event_time.astimezone(NEW_YORK).date()
+            for event in rows
+            if event.source != "fed" and event.category == "fomc_decision"
+        }
+        ratios = {
+            (row["category"], row["symbol"]): row.get("abs_move_ratio")
+            for row in store.event_stats()
+            if row.get("symbol") in {"SPY", "QQQ", "TLT"}
+        }
+        return [
+            {
+                **_macro_event_dict(event),
+                "abs_move_ratios": {
+                    symbol: ratios.get((event.category, symbol))
+                    for symbol in ("SPY", "QQQ", "TLT")
+                },
+            }
+            for event in rows
+            if not (
+                event.source == "fed"
+                and event.category == "fomc_decision"
+                and event.event_time.astimezone(NEW_YORK).date() in alternate_fomc_dates
+            )
+        ]
+
+    @app.get("/api/event-study")
+    def event_study(category: str | None = None) -> list[dict[str, Any]]:
+        return store.event_stats(category or None)
+
+    @app.get("/api/event-study/latest")
+    def latest_event_study() -> dict[str, Any]:
+        payload = store.latest_snapshot("event_study", "latest")
+        if payload is None:
+            raise HTTPException(404, "还没有可用的事件测算")
+        return payload
+
+    @app.get("/api/macro-events/major")
+    def major_macro_events(days: int = Query(7, ge=1, le=30)) -> list[dict[str, Any]]:
+        now = datetime.now(NEW_YORK)
+        today = now.date()
+        start, end = _date_window(today, days)
+        return group_major(
+            [event for event in store.macro_events_between(start, end) if event.event_time > now],
+            start=today,
+            end=today + timedelta(days=days),
+        )
 
     @app.get("/api/tracking")
     def tracking(
@@ -187,6 +263,37 @@ def _news_dict(item: Any) -> dict[str, Any]:
         "body": item.body,
         "url": item.url,
         "symbols": list(item.symbols),
+    }
+
+
+def _date_window(today: date, days: int) -> tuple[datetime, datetime]:
+    start = datetime.combine(today, datetime.min.time(), NEW_YORK).astimezone(timezone.utc)
+    end_day = today + timedelta(days=days + 1)
+    end = datetime.combine(end_day, datetime.min.time(), NEW_YORK).astimezone(timezone.utc)
+    return start, end
+
+
+def _macro_event_dict(event: MacroEvent) -> dict[str, Any]:
+    local_ny = event.event_time.astimezone(NEW_YORK)
+    local_beijing = event.event_time.astimezone(BEIJING)
+    return {
+        "time": event.event_time.isoformat(),
+        "time_ny": local_ny.strftime("%Y-%m-%d %H:%M"),
+        "time_beijing": local_beijing.strftime("%Y-%m-%d %H:%M"),
+        "title": event.title,
+        "name": (
+            event.title
+            if event.category == "other"
+            else f"{CATEGORY_NAMES[event.category]} · {event.title}"
+        ),
+        "category": event.category,
+        "importance": event.importance,
+        "period": event.period,
+        "actual": event.actual,
+        "forecast": event.forecast,
+        "previous": event.previous,
+        "source": event.source,
+        "major": event.category in MAJOR_CATEGORIES,
     }
 
 

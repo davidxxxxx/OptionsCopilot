@@ -110,7 +110,8 @@ def test_tracking_stats_and_edge_buckets() -> None:
     rows = [
         {"status": "closed", "origin": "news", "structure": "vertical", "params_version": "a",
          "entry": {"idea": {"max_loss": 100.0, "return_on_risk": 0.01, "view_pop": 0.6,
-                              "market_pop": 0.5, "view": {"conviction": 3}}},
+                              "market_pop": 0.5, "view": {"conviction": 3},
+                              "macro_events": [{"date": "2026-10-14", "name": "CPI"}]}},
          "exit": {"pnl": 20.0, "return_on_risk": 0.2, "code": "take_profit"}},
         {"status": "closed", "origin": "ladder", "structure": "vertical", "params_version": "b",
          "entry": {"idea": {"max_loss": 200.0, "return_on_risk": 0.07, "view_pop": 0.55,
@@ -129,3 +130,4 @@ def test_tracking_stats_and_edge_buckets() -> None:
     assert stats["open_unrealized"] == 5.0
     assert stats["exit_reasons"] == {"take_profit": 1, "stop_loss": 1, "expired_unmarked": 1}
     assert set(stats["by_edge_bucket"]) == {"<2%", "5–10%"}
+    assert set(stats["by_macro_event"]) == {"跨越重大事件", "不跨越"}

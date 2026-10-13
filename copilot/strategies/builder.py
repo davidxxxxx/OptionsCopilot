@@ -152,6 +152,7 @@ def build_candidates(
     *,
     today: date,
     event_dates: Sequence[date] = (),
+    catalyst_dates: Sequence[date] = (),
     indicative_prices: bool = False,
     expiries: Sequence[date] | None = None,
 ) -> list[Candidate]:
@@ -162,14 +163,17 @@ def build_candidates(
     price (market closed).
     """
 
-    view = _effective_view(view, chain, settings, today=today, event_dates=event_dates)
+    view = _effective_view(
+        view, chain, settings, today=today, event_dates=event_dates, catalyst_dates=catalyst_dates
+    )
     names = structures_for(view)
     candidates: list[Candidate] = []
     setups: list[_ExpirySetup] = []
     for expiry in expiries if expiries is not None else chain.expiries():
         setup = _ExpirySetup.create(
             view, chain, expiry, settings,
-            today=today, event_dates=event_dates, indicative_prices=indicative_prices,
+            today=today, event_dates=event_dates, catalyst_dates=catalyst_dates,
+            indicative_prices=indicative_prices,
         )
         if setup is None:
             continue
@@ -211,6 +215,7 @@ def rebuild_candidate(
     structure: str,
     legs: Sequence[tuple[date, float, str, int]],
     event_dates: Sequence[date] = (),
+    catalyst_dates: Sequence[date] = (),
     indicative_prices: bool = False,
 ) -> Candidate | None:
     """Re-score an exact earlier structure ((expiry, strike, right, signed qty) legs) on new quotes."""
@@ -218,10 +223,13 @@ def rebuild_candidate(
     expiries = sorted({expiry for expiry, *_ in legs})
     if len(expiries) > 2 or (len(expiries) == 2) != (structure in MULTI_EXPIRY):
         return None
-    view = _effective_view(view, chain, settings, today=today, event_dates=event_dates)
+    view = _effective_view(
+        view, chain, settings, today=today, event_dates=event_dates, catalyst_dates=catalyst_dates
+    )
     setup = _ExpirySetup.create(
         view, chain, expiries[0], settings,
-        today=today, event_dates=event_dates, indicative_prices=indicative_prices, any_dte=True,
+        today=today, event_dates=event_dates, catalyst_dates=catalyst_dates,
+        indicative_prices=indicative_prices, any_dte=True,
     )
     if setup is None or setup.blocks(structure):
         return None  # e.g. an earnings date now falls before the short leg expires
@@ -244,11 +252,19 @@ def rebuild_candidate(
 
 
 def _effective_view(
-    view: View, chain: OptionChain, settings: StrategySettings, *, today: date, event_dates: Sequence[date]
+    view: View,
+    chain: OptionChain,
+    settings: StrategySettings,
+    *,
+    today: date,
+    event_dates: Sequence[date],
+    catalyst_dates: Sequence[date] = (),
 ) -> View:
     low, high = dte_bounds(view, settings)
     expiries = [e for e in chain.expiries() if low <= (e - today).days <= high]
-    if view.volatility == "expand" and not _has_catalyst(view, event_dates, today, max(expiries, default=today)):
+    if view.volatility == "expand" and not _has_catalyst(
+        view, event_dates, catalyst_dates, today, max(expiries, default=today)
+    ):
         # "Volatility will expand" without a dated catalyst is a vague claim; price it neutral
         # (and pick neutral structures) instead of paying up for long premium.
         return replace(view, volatility="neutral")
@@ -292,6 +308,7 @@ class _ExpirySetup:
         *,
         today: date,
         event_dates: Sequence[date],
+        catalyst_dates: Sequence[date],
         indicative_prices: bool,
         any_dte: bool = False,
     ) -> "_ExpirySetup | None":
@@ -308,7 +325,9 @@ class _ExpirySetup:
             return None
         has_event = any(today <= event <= expiry for event in event_dates)
         vol_view = view.volatility
-        if vol_view == "expand" and not _has_catalyst(view, event_dates, today, expiry):
+        if vol_view == "expand" and not _has_catalyst(
+            view, event_dates, catalyst_dates, today, expiry
+        ):
             vol_view = "neutral"  # the catalyst falls after this expiry
         view_sigma = context.atm_iv * VOL_VIEW_MULTIPLIER[vol_view]
         hv20 = chain.underlying.hv20
@@ -335,7 +354,7 @@ class _ExpirySetup:
             target=spot * (1 + drift),
             settings=settings,
             has_event=has_event,
-            origin="ladder" if view.source == "ladder" else "news",
+            origin=view.source if view.source in {"ladder", "macro"} else "news",
         )
 
     def evaluate(self, structure: str, legs: list[Leg]) -> "Candidate | None":
@@ -350,8 +369,14 @@ class _ExpirySetup:
         return _evaluate_multi(self, structure, legs, back)
 
 
-def _has_catalyst(view: View, event_dates: Sequence[date], today: date, expiry: date) -> bool:
-    dates = [*event_dates, *([view.catalyst_date] if view.catalyst_date else [])]
+def _has_catalyst(
+    view: View,
+    event_dates: Sequence[date],
+    catalyst_dates: Sequence[date],
+    today: date,
+    expiry: date,
+) -> bool:
+    dates = [*event_dates, *catalyst_dates, *([view.catalyst_date] if view.catalyst_date else [])]
     return any(today <= moment <= expiry for moment in dates)
 
 

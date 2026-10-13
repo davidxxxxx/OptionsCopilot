@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import Any
 
 from copilot.analysis.tagging import NewsTag
+from copilot.news.macro_calendar import MacroEvent
 from copilot.news.models import EarningsEvent, NewsItem
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 5
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS news(
@@ -155,6 +156,26 @@ CREATE TABLE IF NOT EXISTS market_state(
     payload TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     PRIMARY KEY(symbol, as_of)
+);
+CREATE TABLE IF NOT EXISTS macro_events(
+    source TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    event_time TEXT NOT NULL,
+    country TEXT NOT NULL,
+    category TEXT NOT NULL,
+    importance INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY(source, source_id)
+);
+CREATE INDEX IF NOT EXISTS macro_events_time ON macro_events(event_time);
+CREATE TABLE IF NOT EXISTS event_stats(
+    category TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    computed_at TEXT NOT NULL,
+    PRIMARY KEY(category, symbol)
 );
 """
 
@@ -372,6 +393,13 @@ class Store:
         rows = self._rows(sql + " ORDER BY id DESC LIMIT 1")
         return int(rows[0]["id"]) if rows else None
 
+    def latest_run_by_trigger(self, trigger: str) -> dict[str, Any] | None:
+        rows = self._rows(
+            "SELECT * FROM runs WHERE trigger=? AND status!='running' ORDER BY id DESC LIMIT 1",
+            (trigger,),
+        )
+        return _run_row(rows[0]) if rows else None
+
     def latest_model_views(self, *, search_runs: int = 30) -> dict[str, Any] | None:
         """Views most recently produced by the LLM: origin run, generation time, payloads."""
 
@@ -415,6 +443,15 @@ class Store:
                 "INSERT OR REPLACE INTO snapshots(run_id, kind, key, payload) VALUES (?,?,?,?)",
                 (run_id, kind, key, _dumps(payload)),
             )
+
+    def latest_snapshot(self, kind: str, key: str) -> dict[str, Any] | list[Any] | None:
+        rows = self._rows(
+            "SELECT s.payload FROM snapshots s JOIN runs r ON r.id=s.run_id"
+            " WHERE s.kind=? AND s.key=? AND r.status IN ('ok','partial')"
+            " ORDER BY s.run_id DESC LIMIT 1",
+            (kind, key),
+        )
+        return json.loads(rows[0]["payload"]) if rows else None
 
     # ---- parameter versions and recommendation tracking ------------------
     def save_param_set(self, version: str, payload: dict[str, Any]) -> None:
@@ -520,6 +557,112 @@ class Store:
             )
         ]
         return result
+
+    def replace_macro_events(
+        self,
+        source: str,
+        start: datetime,
+        end: datetime,
+        events: Iterable[MacroEvent],
+    ) -> int:
+        fetched = _now()
+        rows = list(events)
+        with self._tx() as db:
+            db.execute(
+                "DELETE FROM macro_events WHERE source=? AND event_time>=? AND event_time<?",
+                (source, start.astimezone(timezone.utc).isoformat(), end.astimezone(timezone.utc).isoformat()),
+            )
+            for event in rows:
+                db.execute(
+                    "INSERT OR REPLACE INTO macro_events(source, source_id, event_time, country,"
+                    " category, importance, title, payload, fetched_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (
+                        source,
+                        event.source_id,
+                        event.event_time.isoformat(),
+                        event.country,
+                        event.category,
+                        event.importance,
+                        event.title,
+                        _dumps({
+                            "period": event.period,
+                            "actual": event.actual,
+                            "forecast": event.forecast,
+                            "previous": event.previous,
+                        }),
+                        fetched,
+                    ),
+                )
+        return len(rows)
+
+    def macro_events_between(
+        self,
+        start: datetime,
+        end: datetime,
+        *,
+        min_importance: int = 0,
+    ) -> list[MacroEvent]:
+        rows = self._rows(
+            "SELECT * FROM macro_events WHERE event_time>=? AND event_time<? AND importance>=?"
+            " ORDER BY event_time, source, source_id",
+            (
+                start.astimezone(timezone.utc).isoformat(),
+                end.astimezone(timezone.utc).isoformat(),
+                min_importance,
+            ),
+        )
+        result = []
+        for row in rows:
+            payload = json.loads(row["payload"])
+            result.append(MacroEvent(
+                source=row["source"],
+                source_id=row["source_id"],
+                event_time=datetime.fromisoformat(row["event_time"]),
+                country=row["country"],
+                title=row["title"],
+                category=row["category"],
+                importance=row["importance"],
+                period=payload.get("period") or "",
+                actual=payload.get("actual"),
+                forecast=payload.get("forecast"),
+                previous=payload.get("previous"),
+            ))
+        return result
+
+    def replace_event_stats(self, rows: Iterable[dict[str, Any]]) -> int:
+        values = list(rows)
+        stamp = _now()
+        with self._tx() as db:
+            for payload in values:
+                db.execute(
+                    "INSERT OR REPLACE INTO event_stats(category, symbol, payload, computed_at)"
+                    " VALUES (?,?,?,?)",
+                    (payload["category"], payload["symbol"], _dumps(payload), stamp),
+                )
+        return len(values)
+
+    def event_stats(self, category: str | None = None) -> list[dict[str, Any]]:
+        sql = "SELECT payload, computed_at FROM event_stats"
+        params: tuple[Any, ...] = ()
+        if category:
+            sql += " WHERE category=?"
+            params = (category,)
+        sql += " ORDER BY category, symbol"
+        return [
+            {**json.loads(row["payload"]), "computed_at": row["computed_at"]}
+            for row in self._rows(sql, params)
+        ]
+
+    def tagged_news_after_id(self, news_id: int) -> list[tuple[NewsItem, NewsTag]]:
+        rows = self._rows(
+            "SELECT n.*, t.payload AS tag_payload FROM news n JOIN news_tags t ON t.news_id=n.id"
+            " WHERE n.id>? ORDER BY n.id",
+            (news_id,),
+        )
+        return [
+            (_news_row(row), NewsTag.from_row(row["id"], json.loads(row["tag_payload"])))
+            for row in rows
+        ]
 
     def save_market_state(self, symbol: str, as_of: date, payload: dict[str, Any]) -> None:
         with self._tx() as db:

@@ -5,7 +5,7 @@ ranked list of defined-risk US option combinations. The user reads the list and 
 order themselves in IBKR; the software never places, modifies or cancels orders.
 
 Pipeline (`copilot/pipeline.py`), run on a schedule and on demand:
-1. News: Jin10 MCP flash news, Finnhub market/company news, earnings calendar (Finnhub, Nasdaq fallback).
+1. News: Jin10 MCP flash news, Finnhub market/company news, earnings calendar (Finnhub, Nasdaq fallback), and US macro calendar (TradingView, ForexFactory fallback, configured FOMC dates).
 2. Market context: IBKR read-only account, underlying quotes, daily history (cached per day).
 3. Tagging: DeepSeek classifies each news item once (category, importance 0-3, Chinese
    summary, per-symbol impacts); tags are stored and never regenerated.
@@ -45,6 +45,7 @@ The rebuild (Oct 2026) replaced the legacy governance-heavy system, which is fro
 | --- | --- |
 | `config/copilot.toml` | All settings; personal overrides in `config/copilot.local.toml` |
 | `copilot/news/` | Jin10 MCP, Finnhub, Nasdaq clients and the collector |
+| `copilot/news/macro_calendar.py` | US macro-event model, parsers, grouping and public-data clients |
 | `copilot/analysis/` | `View` model, DeepSeek client, news tagging, view ledger, macro brief |
 | `copilot/market/` | IBKR read-only adapter, data models, history stats, NYSE calendar |
 | `copilot/market/state.py` | Daily CBOE-derived market-state features (display only) |

@@ -177,6 +177,7 @@ def exit_alerts(
     today: date,
     rules: RulesSettings,
     earnings: Sequence[date] = (),
+    macro_events: Sequence[dict] = (),
     view: View | None = None,
     net_liquidation: float | None = None,
 ) -> list[dict[str, str]]:
@@ -201,6 +202,16 @@ def exit_alerts(
         if group.has_short_leg and any(today <= event <= expiries[0] for event in earnings):
             event = min(event for event in earnings if event >= today)
             add("action", "earnings", f"{event:%m/%d} 财报在空头腿到期前，建议财报前平掉卖方部分")
+        relevant = [
+            event for event in macro_events
+            if today <= date.fromisoformat(event["date"]) <= expiries[0]
+        ]
+        if group.has_short_leg and relevant:
+            text = "、".join(
+                f"{date.fromisoformat(event['date']):%m/%d} 美国 {event['name']} 公布"
+                for event in relevant
+            )
+            add("warn", "macro_event", f"{text}，在空头腿到期前，注意跳空风险")
     if view is not None and view.direction != "neutral" and view.conviction >= 3 and group.direction:
         if (view.direction == "bullish") != (group.direction > 0):
             add("warn", "view_conflict", f"观点账本当前为{'看涨' if view.direction == 'bullish' else '看跌'}（{view.conviction}★），与持仓方向相反")

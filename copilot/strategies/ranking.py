@@ -36,7 +36,7 @@ def rank_candidates(
     settings: StrategySettings,
     account: AccountSnapshot | None = None,
     previous: Sequence[Mapping[str, Any]] = (),
-    rule_views: Mapping[str, View] | None = None,
+    rule_views: Mapping[tuple[str, str], View] | None = None,
     portfolio: Any = None,
 ) -> list[dict[str, Any]]:
     """Positive edge only, best edge-per-dollar-at-risk first, capped per symbol.
@@ -76,7 +76,11 @@ def rank_candidates(
     ideas = [
         to_idea(
             candidate, rank,
-            view=(rule_views if candidate.origin == "ladder" else views).get(candidate.symbol),
+            view=(
+                views.get(candidate.symbol)
+                if candidate.origin == "news"
+                else rule_views.get((candidate.origin, candidate.symbol))
+            ),
             settings=settings, account=account, portfolio=portfolio,
         )
         for rank, candidate in enumerate(chosen, start=1)
