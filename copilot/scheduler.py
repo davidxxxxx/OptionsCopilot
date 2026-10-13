@@ -144,6 +144,7 @@ class Scheduler:
         events: EventSettings | None = None,
         universe: Sequence[str] = (),
         refresh_event_study: Callable[[], None] | None = None,
+        archive_intraday: Callable[[datetime, bool], None] | None = None,
         news_poll_minutes: int = 15,
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         tick_seconds: float = 30.0,
@@ -156,6 +157,7 @@ class Scheduler:
         self.events = events or EventSettings(enabled=False)
         self.universe = set(universe)
         self.refresh_event_study = refresh_event_study
+        self.archive_intraday = archive_intraday
         self.news_poll_interval = timedelta(minutes=news_poll_minutes)
         self.clock = clock
         self.tick_seconds = tick_seconds
@@ -168,6 +170,8 @@ class Scheduler:
 
     def start(self) -> None:
         if self._thread is None:
+            if self.archive_intraday is not None:
+                self.archive_intraday(self.clock(), True)
             self._thread = threading.Thread(target=self._loop, name="copilot-scheduler", daemon=True)
             self._thread.start()
 
@@ -185,6 +189,11 @@ class Scheduler:
     def tick(self) -> str | None:
         now = self.clock()
         self.last_tick = now
+        if self.archive_intraday is not None:
+            try:
+                self.archive_intraday(now, False)
+            except Exception:
+                log.exception("intraday archive tick failed")
         if self.runs.busy:
             return None
         slot = due_slot(now, self.schedule, self.store)

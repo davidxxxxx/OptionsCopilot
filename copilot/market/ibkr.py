@@ -194,6 +194,61 @@ class IbkrMarket:
             if _float(bar.close) is not None
         ]
 
+    def intraday_history(
+        self,
+        symbol: str,
+        *,
+        end: datetime,
+        duration: str = "1 M",
+        bar_size: str = "5 mins",
+    ) -> list[tuple[int, float, float, float, float, float | None]]:
+        """RTH-only historical minute bars; this adapter remains read-only."""
+
+        from ib_insync import Stock
+
+        ib = self._require()
+        symbol = symbol.upper()
+        contract = self._stocks.get(symbol)
+        if contract is None:
+            qualified = ib.qualifyContracts(Stock(symbol, "SMART", "USD"))
+            contract = next((item for item in qualified if item.conId), None)
+            if contract is None:
+                return []
+            self._stocks[symbol] = contract
+        bars = ib.reqHistoricalData(
+            contract,
+            endDateTime=end,
+            durationStr=duration,
+            barSizeSetting=bar_size,
+            whatToShow="TRADES",
+            useRTH=True,
+            formatDate=2,
+            timeout=self.settings.history_timeout_seconds,
+        )
+        result = []
+        for bar in bars or ():
+            moment = bar.date
+            if isinstance(moment, str):
+                try:
+                    moment = datetime.fromisoformat(moment.replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+            if not isinstance(moment, datetime):
+                continue
+            if moment.tzinfo is None:
+                moment = moment.replace(tzinfo=timezone.utc)
+            values = tuple(_float(value) for value in (
+                bar.open, bar.high, bar.low, bar.close,
+            ))
+            if any(value is None for value in values):
+                continue
+            open_, high, low, close = values
+            result.append((
+                int(moment.astimezone(timezone.utc).timestamp()),
+                float(open_), float(high), float(low), float(close), _float(bar.volume),
+            ))
+        return sorted(result)
+
     # ---- options ----------------------------------------------------------
     def chain_info(self, symbol: str) -> ChainInfo | None:
         ib = self._require()

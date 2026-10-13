@@ -104,6 +104,21 @@ recency_half_life = 36.0
 min_wf_views = 8
 min_wf_hit_rate = 0.55
 
+[intraday]
+enabled = true
+nasdaq_after_et = "20:05"
+# Empty means reuse events.study_symbols.
+nasdaq_symbols = []
+max_news_symbols = 30
+jin10_codes = ["SPX", "DJI", "USDJPY", "USDCNH", "EURUSD", "XAUUSD", "USOIL", "HSI", "000300"]
+jin10_interval_hours = 6
+ibkr_backfill = true
+ibkr_backfill_months = 3
+ibkr_bar_size = "5 mins"
+ibkr_requests_per_day = 60
+ibkr_request_spacing_seconds = 10
+ibkr_client_id_offset = 10
+
 [llm]
 enabled = true
 model = "deepseek-v4-flash"

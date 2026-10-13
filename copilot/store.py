@@ -9,12 +9,14 @@ from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from copilot.analysis.tagging import NewsTag
 from copilot.news.macro_calendar import MacroEvent
 from copilot.news.models import EarningsEvent, NewsItem
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
+NEW_YORK = ZoneInfo("America/New_York")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS news(
@@ -196,6 +198,14 @@ CREATE TABLE IF NOT EXISTS event_reactions(
 );
 CREATE INDEX IF NOT EXISTS event_reactions_latest
 ON event_reactions(category, symbol, event_date DESC);
+CREATE TABLE IF NOT EXISTS intraday_series(
+    source TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    day TEXT NOT NULL,
+    bars TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY(source, symbol, day)
+);
 """
 
 
@@ -950,6 +960,90 @@ class Store:
                 "INSERT OR REPLACE INTO daily_cache(symbol, kind, as_of, payload) VALUES (?,?,?,?)",
                 (symbol, kind, as_of.isoformat(), _dumps(payload)),
             )
+
+    def merge_intraday(self, source: str, symbol: str, bars: Iterable[Iterable[Any]]) -> int:
+        """Merge timestamp-keyed bars into New York trading-day archive rows."""
+
+        grouped: dict[str, dict[int, list[Any]]] = {}
+        for raw in bars:
+            values = list(raw)
+            if len(values) != 6:
+                continue
+            try:
+                timestamp = int(values[0])
+                open_, high, low, close = (float(value) for value in values[1:5])
+                volume = None if values[5] is None else float(values[5])
+                day = datetime.fromtimestamp(timestamp, timezone.utc).astimezone(NEW_YORK).date()
+            except (OSError, OverflowError, TypeError, ValueError):
+                continue
+            grouped.setdefault(day.isoformat(), {})[timestamp] = [
+                timestamp, open_, high, low, close, volume,
+            ]
+        if not grouped:
+            return 0
+        source = source.strip().lower()
+        symbol = symbol.strip().upper()
+        stamp = _now()
+        merged_count = 0
+        with self._tx() as db:
+            for day, incoming in grouped.items():
+                row = db.execute(
+                    "SELECT bars FROM intraday_series WHERE source=? AND symbol=? AND day=?",
+                    (source, symbol, day),
+                ).fetchone()
+                existing = {
+                    int(bar[0]): list(bar)
+                    for bar in (json.loads(row["bars"]) if row else [])
+                    if isinstance(bar, list) and len(bar) == 6
+                }
+                existing.update(incoming)
+                encoded = [existing[key] for key in sorted(existing)]
+                db.execute(
+                    "INSERT INTO intraday_series(source, symbol, day, bars, fetched_at)"
+                    " VALUES (?,?,?,?,?) ON CONFLICT(source, symbol, day) DO UPDATE SET"
+                    " bars=excluded.bars, fetched_at=excluded.fetched_at",
+                    (source, symbol, day, _dumps(encoded), stamp),
+                )
+                merged_count += len(incoming)
+        return merged_count
+
+    def intraday_day(self, source: str, symbol: str, day: date | str) -> list[list[Any]]:
+        rows = self._rows(
+            "SELECT bars FROM intraday_series WHERE source=? AND symbol=? AND day=?",
+            (source.lower(), symbol.upper(), str(day)),
+        )
+        return json.loads(rows[0]["bars"]) if rows else []
+
+    def intraday_status(self) -> list[dict[str, Any]]:
+        rows = self._rows(
+            "SELECT source, symbol, day, bars, fetched_at FROM intraday_series"
+            " ORDER BY source, symbol, day"
+        )
+        summaries: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            summary = summaries.setdefault(row["source"], {
+                "source": row["source"],
+                "symbols": set(),
+                "days": set(),
+                "last_day": None,
+                "rows": 0,
+                "last_fetch": None,
+            })
+            summary["symbols"].add(row["symbol"])
+            summary["days"].add(row["day"])
+            summary["last_day"] = max(summary["last_day"] or row["day"], row["day"])
+            summary["rows"] += len(json.loads(row["bars"]))
+            summary["last_fetch"] = max(
+                summary["last_fetch"] or row["fetched_at"], row["fetched_at"]
+            )
+        return [
+            {
+                **summary,
+                "symbols": len(summary["symbols"]),
+                "days": len(summary["days"]),
+            }
+            for summary in summaries.values()
+        ]
 
     def set_kv(self, key: str, value: Any) -> None:
         with self._tx() as db:

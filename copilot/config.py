@@ -5,7 +5,7 @@ import ipaddress
 import os
 import tomllib
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, time
 from pathlib import Path
 from typing import Any
 
@@ -82,6 +82,24 @@ class EventSettings:
     recency_half_life: float = 36.0
     min_wf_views: int = 8
     min_wf_hit_rate: float = 0.55
+
+
+@dataclass(frozen=True)
+class IntradaySettings:
+    enabled: bool = True
+    nasdaq_after_et: str = "20:05"
+    nasdaq_symbols: tuple[str, ...] = ()
+    max_news_symbols: int = 30
+    jin10_codes: tuple[str, ...] = (
+        "SPX", "DJI", "USDJPY", "USDCNH", "EURUSD", "XAUUSD", "USOIL", "HSI", "000300",
+    )
+    jin10_interval_hours: float = 6.0
+    ibkr_backfill: bool = True
+    ibkr_backfill_months: int = 3
+    ibkr_bar_size: str = "5 mins"
+    ibkr_requests_per_day: int = 60
+    ibkr_request_spacing_seconds: float = 10.0
+    ibkr_client_id_offset: int = 10
 
 
 @dataclass(frozen=True)
@@ -201,6 +219,7 @@ class Settings:
     news: NewsSettings
     calendar: CalendarSettings
     events: EventSettings
+    intraday: IntradaySettings
     llm: LlmSettings
     views: ViewsSettings
     strategy: StrategySettings
@@ -260,6 +279,7 @@ def _build(raw: dict[str, Any]) -> Settings:
         news=NewsSettings(**raw.get("news", {})),
         calendar=_calendar_settings(raw.get("calendar", {})),
         events=_event_settings(raw.get("events", {})),
+        intraday=_intraday_settings(raw.get("intraday", {})),
         llm=LlmSettings(**raw.get("llm", {})),
         views=_views_settings(raw.get("views", {})),
         strategy=StrategySettings(**raw.get("strategy", {})),
@@ -311,6 +331,21 @@ def _validate(settings: Settings) -> None:
         or not 0 <= events.min_wf_hit_rate <= 1
     ):
         raise ValueError("events study settings are invalid")
+    intraday = settings.intraday
+    try:
+        intraday_time = time.fromisoformat(intraday.nasdaq_after_et)
+    except ValueError:
+        raise ValueError("invalid intraday Nasdaq archive time") from None
+    if (
+        intraday_time.second
+        or intraday.max_news_symbols < 0
+        or intraday.jin10_interval_hours <= 0
+        or intraday.ibkr_backfill_months < 0
+        or intraday.ibkr_requests_per_day < 1
+        or intraday.ibkr_request_spacing_seconds < 0
+        or intraday.ibkr_client_id_offset < 1
+    ):
+        raise ValueError("intraday settings are invalid")
     if not 0 <= strategy.tail_weight < 1:
         raise ValueError("strategy.tail_weight must be in [0, 1)")
     for moment in settings.schedule.run_times_et:
@@ -343,6 +378,14 @@ def _event_settings(raw: dict[str, Any]) -> EventSettings:
     if "study_symbols" in values:
         values["study_symbols"] = _symbols(values["study_symbols"])
     return EventSettings(**values)
+
+
+def _intraday_settings(raw: dict[str, Any]) -> IntradaySettings:
+    values = dict(raw)
+    for key in ("nasdaq_symbols", "jin10_codes"):
+        if key in values:
+            values[key] = _symbols(values[key])
+    return IntradaySettings(**values)
 
 
 def _views_settings(raw: dict[str, Any]) -> ViewsSettings:
@@ -385,6 +428,7 @@ __all__ = [
     "CalendarSettings",
     "EventSettings",
     "IbkrSettings",
+    "IntradaySettings",
     "LlmSettings",
     "NewsSettings",
     "OptionsSettings",

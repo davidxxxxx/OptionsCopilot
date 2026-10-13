@@ -227,6 +227,40 @@ def create_app(runtime: Runtime) -> FastAPI:
     ) -> list[dict[str, Any]]:
         return store.market_state_history(symbol.upper(), days)
 
+    @app.get("/api/intraday/status")
+    def intraday_status() -> dict[str, Any]:
+        if runtime.intraday is not None:
+            return runtime.intraday.status()
+        stored = {row["source"]: row for row in store.intraday_status()}
+        return {
+            "enabled": settings.intraday.enabled,
+            "active": None,
+            "sources": [stored.get(source, {
+                "source": source,
+                "symbols": 0,
+                "days": 0,
+                "last_day": None,
+                "rows": 0,
+                "last_fetch": None,
+                "last_error": None,
+                "last_job": None,
+                "job_status": None,
+            }) for source in ("nasdaq", "jin10", "ibkr")],
+        }
+
+    @app.get("/api/intraday/{source}/{symbol}")
+    def intraday_day(
+        source: str = ApiPath(pattern=r"^(nasdaq|jin10|ibkr)$"),
+        symbol: str = ApiPath(pattern=r"^[A-Za-z0-9]{1,10}$"),
+        day: date = Query(),
+    ) -> dict[str, Any]:
+        return {
+            "source": source,
+            "symbol": symbol.upper(),
+            "day": day.isoformat(),
+            "bars": store.intraday_day(source, symbol, day),
+        }
+
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.get("/")

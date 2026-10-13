@@ -139,7 +139,7 @@ def test_schema_v2_upgrade_preserves_rows(tmp_path: Path) -> None:
     try:
         assert upgraded.recent_news(datetime(2000, 1, 1, tzinfo=timezone.utc))[0].title == "旧新闻"
         with sqlite3.connect(path) as db:
-            assert db.execute("PRAGMA user_version").fetchone()[0] == 6
+            assert db.execute("PRAGMA user_version").fetchone()[0] == 7
     finally:
         upgraded.close()
 

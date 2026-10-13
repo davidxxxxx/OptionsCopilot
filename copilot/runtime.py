@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import logging
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time, timedelta, timezone
-from dataclasses import field
 from logging.handlers import RotatingFileHandler
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -19,6 +18,7 @@ from copilot.analysis.event_study import (
 )
 from copilot.analysis.deepseek import DeepSeekClient
 from copilot.config import Settings, load_settings
+from copilot.intraday_archive import IntradayArchive
 from copilot.market.cboe import CboeClient
 from copilot.market.ibkr import IbkrMarket
 from copilot.market.nasdaq_history import (
@@ -46,6 +46,7 @@ class Runtime:
     deps: PipelineDeps
     runs: RunManager
     scheduler: Scheduler | None
+    intraday: IntradayArchive | None = None
     _study_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
     _study_thread: threading.Thread | None = field(default=None, init=False, repr=False)
 
@@ -91,6 +92,10 @@ class Runtime:
         )
         self._study_thread.start()
         return True
+
+    def tick_intraday(self, now: datetime, startup: bool = False) -> None:
+        if self.intraday is not None:
+            self.intraday.tick(now, startup=startup)
 
     def _refresh_event_study_now(self) -> None:
         if not self._study_lock.acquire(blocking=False):
@@ -230,6 +235,19 @@ def build_runtime(
         )
     )
     runtime = Runtime(settings, secrets, store, deps, runs, None)
+    runtime.intraday = IntradayArchive(
+        settings,
+        store,
+        runs,
+        jin10=deps.news_sources.jin10 if deps.news_sources else None,
+        market_factory=(
+            lambda: IbkrMarket(replace(
+                settings.ibkr,
+                client_id=settings.ibkr.client_id + settings.intraday.ibkr_client_id_offset,
+            ))
+            if use_ibkr else None
+        ),
+    )
     if with_scheduler:
         runtime.scheduler = Scheduler(
             settings.schedule,
@@ -240,6 +258,7 @@ def build_runtime(
             events=settings.events,
             universe=settings.universe,
             refresh_event_study=runtime.refresh_event_study,
+            archive_intraday=runtime.tick_intraday,
         )
     if settings.events.enabled and event_study_refresh_needed(store):
         runtime.refresh_event_study()

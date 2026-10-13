@@ -14,6 +14,7 @@ const ENDPOINTS = Object.freeze({
   views: "/api/views",
   tracking: "/api/tracking",
   marketState: "/api/market-state",
+  intradayStatus: "/api/intraday/status",
   meta: "/api/meta",
 });
 const ACTION_NAMES = Object.freeze({
@@ -26,7 +27,7 @@ const VOL_NAMES = Object.freeze({ expand: "波动放大", contract: "波动收�
 const RUN_STATUS = Object.freeze({ ok: "完成", partial: "部分完成", failed: "失败", running: "运行中" });
 const SOURCE_NAMES = Object.freeze({
   jin10: "金十", finnhub_market: "Finnhub 市场", finnhub_company: "Finnhub 公司", finnhub: "Finnhub", earnings: "财报日历",
-  tradingview: "TradingView", forexfactory: "ForexFactory", fed: "美联储",
+  tradingview: "TradingView", forexfactory: "ForexFactory", fed: "美联储", nasdaq: "Nasdaq", ibkr: "IBKR",
 });
 const HOUR_NAMES = Object.freeze({ bmo: "盘前", amc: "盘后", dmh: "盘中" });
 
@@ -867,6 +868,24 @@ async function refreshMacroEvents() {
         return `${symbol} ${ratio === null ? "—" : ratio.toFixed(2)}`;
       }).join(" / ") }),
       el("td", { text: SOURCE_NAMES[event.source] || event.source }),
+    ]));
+  }
+  refreshIntradayStatus();
+}
+
+async function refreshIntradayStatus() {
+  let status;
+  try { status = await getJson(ENDPOINTS.intradayStatus); } catch (error) { return; }
+  const body = document.querySelector("#intraday-status-table tbody");
+  clear(body);
+  for (const row of status.sources || []) {
+    body.appendChild(el("tr", {}, [
+      el("td", { text: SOURCE_NAMES[row.source] || row.source }),
+      el("td", { className: "num", text: row.symbols ?? 0 }),
+      el("td", { className: "num", text: row.days ?? 0 }),
+      el("td", { text: row.last_day || "—" }),
+      el("td", { text: localTime(row.last_fetch || row.last_job) }),
+      el("td", { className: "neg", text: row.last_error || "" }),
     ]));
   }
 }

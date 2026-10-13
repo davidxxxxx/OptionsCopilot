@@ -76,6 +76,31 @@ class Jin10Client:
             if session_id:
                 self._delete(session_id)
 
+    def kline(self, code: str, start: int, count: int) -> Any:
+        """Fetch one fixed-size minute-kline page with fixed-code errors."""
+
+        if not code or not 1 <= count <= 100:
+            raise Jin10Error("INVALID_ARGUMENT")
+        session_id: str | None = None
+        try:
+            _result, session_id = self._call("initialize", {
+                "protocolVersion": PROTOCOL_VERSION,
+                "capabilities": {},
+                "clientInfo": {"name": "options-copilot", "version": "2.0"},
+            }, None)
+            self._notify("notifications/initialized", session_id)
+            result, _ = self._call(
+                "tools/call",
+                {"name": "get_kline", "arguments": {
+                    "code": code.upper(), "time": int(start), "count": int(count),
+                }},
+                session_id,
+            )
+            return _tool_payload(result)
+        finally:
+            if session_id:
+                self._delete(session_id)
+
     def _call(
         self, method: str, params: dict[str, Any], session_id: str | None
     ) -> tuple[dict[str, Any], str | None]:
@@ -196,7 +221,14 @@ def parse_jin10_time(value: Any) -> datetime | None:
 
 def _tool_payload(result: dict[str, Any]) -> Any:
     if result.get("isError") is True:
-        raise Jin10Error("TOOL_ERROR")
+        structured = result.get("structuredContent")
+        status = structured.get("status") if isinstance(structured, dict) else result.get("status")
+        content = result.get("content")
+        text = " ".join(
+            str(item.get("text", ""))
+            for item in content if isinstance(item, dict)
+        ) if isinstance(content, list) else ""
+        raise Jin10Error("HTTP_400" if status == 400 or "400" in text else "TOOL_ERROR")
     structured = result.get("structuredContent")
     if isinstance(structured, dict):
         return structured
