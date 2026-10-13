@@ -109,6 +109,17 @@ def weekly_cache_date(today: date) -> date:
     return today - timedelta(days=today.weekday())
 
 
+def merge_daily_bars(
+    cached: list[tuple[date, float, float, float, float]],
+    recent: list[tuple[date, float, float, float, float]],
+) -> list[tuple[date, float, float, float, float]]:
+    """Merge a short fresh window into long cached history by trading date."""
+
+    merged = {row[0]: row for row in cached}
+    merged.update({row[0]: row for row in recent})
+    return [merged[day] for day in sorted(merged)]
+
+
 def _price(value: Any) -> float:
     return float(str(value or "").replace("$", "").replace(",", ""))
 
@@ -119,5 +130,6 @@ __all__ = [
     "daily_closes",
     "parse_bars",
     "parse_closes",
+    "merge_daily_bars",
     "weekly_cache_date",
 ]

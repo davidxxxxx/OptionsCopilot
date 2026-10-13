@@ -115,6 +115,7 @@ main { padding: 16px 20px; max-width: 1500px; margin: 0 auto; }
 .error { color: var(--bad); white-space: pre-wrap; }
 .macro { white-space: pre-wrap; margin: 0; }
 .event-banner { color: var(--accent); font-weight: 700; }
+.event-study-generated { font-weight: 700; }
 
 .stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
 .stage { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }

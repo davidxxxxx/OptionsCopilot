@@ -100,11 +100,16 @@
           <span class="muted">统计关联，不是因果；样本少，结论以复盘为准</span>
         </div>
         <p id="event-study-head" class="muted">暂无近期重大事件测算。</p>
+        <p id="event-study-caveat" class="muted hidden"></p>
+        <p id="event-study-thresholds" class="muted"></p>
+        <p id="event-study-next" class="muted"></p>
         <div class="table-wrap">
           <table id="event-study-table">
             <thead><tr>
               <th>标的</th><th class="num">历史次数</th><th class="num">开盘跳空 每σ</th>
-              <th class="num">开盘后 每σ</th><th class="num">t 值</th><th class="num">本次预计</th>
+              <th class="num">开盘后 每σ</th><th class="num">t 值</th>
+              <th class="num">前半 t</th><th class="num">后半 t</th><th>稳定</th>
+              <th class="num">滚动命中率</th><th>滚动门槛</th><th class="num">本次预计</th>
               <th class="num">事件日/平日波动比</th><th>是否生成观点</th>
             </tr></thead>
             <tbody></tbody>
@@ -196,6 +201,45 @@
           </table>
         </div>
         <p id="macro-events-empty" class="muted hidden">所选范围内暂无宏观事件。</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>事件反应记录（系统从每次公布中学习）</h2>
+          <div class="filters">
+            <select id="reaction-category">
+              <option value="cpi">CPI 通胀</option>
+              <option value="ppi">PPI 生产者价格</option>
+              <option value="nfp">非农就业</option>
+              <option value="pce">PCE 通胀</option>
+              <option value="retail_sales">零售销售</option>
+              <option value="gdp">GDP</option>
+              <option value="fomc_decision">美联储决议</option>
+            </select>
+            <select id="reaction-symbol">
+              <option value="SPY" selected>SPY</option><option value="QQQ">QQQ</option>
+              <option value="IWM">IWM</option><option value="DIA">DIA</option>
+              <option value="TLT">TLT</option><option value="GLD">GLD</option>
+              <option value="HYG">HYG</option><option value="XLF">XLF</option>
+              <option value="XLK">XLK</option><option value="XLE">XLE</option>
+              <option value="XLU">XLU</option><option value="XLY">XLY</option>
+              <option value="XLP">XLP</option><option value="XLV">XLV</option>
+              <option value="XLI">XLI</option><option value="SMH">SMH</option>
+              <option value="KRE">KRE</option><option value="XHB">XHB</option>
+            </select>
+          </div>
+        </div>
+        <p id="reaction-summary" class="muted">暂无事件反应记录。</p>
+        <div class="table-wrap">
+          <table id="event-reactions-table">
+            <thead><tr>
+              <th>日期</th><th>实际/预期</th><th class="num">超预期 σ</th>
+              <th class="num">开盘跳空</th><th class="num">开盘后（或次日）</th>
+              <th class="num">当时预测</th><th>方向是否命中</th><th class="num">IV 变化</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="muted">统计关联，不是因果；小样本和市场环境变化都可能使历史关系失效。</p>
       </div>
       <div class="card">
         <h2>未来 10 天财报（自选池内）</h2>

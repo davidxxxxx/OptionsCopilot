@@ -8,7 +8,9 @@ const ENDPOINTS = Object.freeze({
   earnings: "/api/earnings",
   macroEvents: "/api/macro-events",
   majorMacroEvents: "/api/macro-events/major",
+  eventStudy: "/api/event-study",
   eventStudyLatest: "/api/event-study/latest",
+  eventReactions: "/api/event-reactions",
   views: "/api/views",
   tracking: "/api/tracking",
   marketState: "/api/market-state",
@@ -320,25 +322,63 @@ async function refreshEventStudy() {
   }
   if (!payload || !payload.event) {
     setText("event-study-head", "暂无近期重大事件测算。");
+    setText("event-study-caveat", "");
+    document.getElementById("event-study-caveat").classList.add("hidden");
+    setText("event-study-thresholds", "");
+    await refreshNextEventLearning();
     return;
   }
   const event = payload.event;
   const prefix = fallback ? `${String(event.time_ny || "").slice(0, 5)} 的测算：` : "";
   setText("event-study-head", `${prefix}美国 ${event.name}（${event.time_ny}）实际 ${event.actual ?? "—"} vs 预期 ${event.forecast ?? "—"}，${event.surprise_text}`);
+  const caveat = document.getElementById("event-study-caveat");
+  setText("event-study-caveat", event.caveat || "");
+  caveat.classList.toggle("hidden", !event.caveat);
+  const thresholds = payload.thresholds || {};
+  const thresholdText = (
+    thresholds.min_events === undefined || thresholds.min_t === undefined
+      ? ""
+      : `门槛：样本 ≥ ${thresholds.min_events}、|t| ≥ ${thresholds.min_t}、前后两半方向一致；滚动观点 ≥ ${thresholds.min_wf_views}、命中率 ≥ ${percent(thresholds.min_wf_hit_rate, 0)}`
+  );
+  setText("event-study-thresholds", thresholdText);
   for (const row of payload.rows || []) {
     const expected = numberOrNull(row.expected_after_sigma);
     const expectedPct = numberOrNull(row.expected_after_pct);
-    studyBody.appendChild(el("tr", {}, [
+    studyBody.appendChild(el("tr", { className: row.generated ? "event-study-generated" : "" }, [
       el("td", { text: row.symbol }),
       el("td", { className: "num", text: row.n ?? "—" }),
       el("td", { className: "num", text: numberOrNull(row.beta_shrunk_gap) === null ? "—" : `${Number(row.beta_shrunk_gap).toFixed(2)}σ` }),
       el("td", { className: "num", text: numberOrNull(row.beta_shrunk_after) === null ? "—" : `${Number(row.beta_shrunk_after).toFixed(2)}σ` }),
       el("td", { className: "num", text: numberOrNull(row.t_after) === null ? "—" : Number(row.t_after).toFixed(1) }),
+      el("td", { className: "num", text: numberOrNull(row.t_after_first) === null ? "—" : Number(row.t_after_first).toFixed(1) }),
+      el("td", { className: "num", text: numberOrNull(row.t_after_second) === null ? "—" : Number(row.t_after_second).toFixed(1) }),
+      el("td", { text: row.stable ? "✓" : "✗" }),
+      el("td", { className: "num", text: percent(row.wf_view_hit_rate, 0) }),
+      el("td", { text: row.wf_pass ? "通过" : "未通过" }),
       el("td", { className: "num", text: expected === null ? "—" : `${expected.toFixed(2)}σ${expectedPct === null ? "" : ` / ${percent(expectedPct, 2)}`}` }),
       el("td", { className: "num", text: numberOrNull(row.abs_move_ratio) === null ? "—" : Number(row.abs_move_ratio).toFixed(2) }),
       el("td", { text: row.generated ? "是" : "否" }),
     ]));
   }
+  await refreshNextEventLearning();
+}
+
+async function refreshNextEventLearning() {
+  let events = [];
+  try { events = await getJson(`${ENDPOINTS.majorMacroEvents}?days=30`); } catch (error) { events = []; }
+  if (!events.length) {
+    setText("event-study-next", "");
+    return;
+  }
+  const next = events[0];
+  let stats = [];
+  try { stats = await getJson(`${ENDPOINTS.eventStudy}?category=${encodeURIComponent(next.category)}`); } catch (error) { stats = []; }
+  const summaries = ["SPY", "QQQ", "TLT"].map((symbol) => {
+    const row = stats.find((item) => item.symbol === symbol);
+    const beta = row ? numberOrNull(row.beta_shrunk_after) : null;
+    return `${symbol} ${beta === null ? "暂无" : `${beta >= 0 ? "+" : ""}${beta.toFixed(2)}σ/σ${row.wf_view_mean > 0 ? "（滚动通过）" : "（滚动未通过）"}`}`;
+  });
+  setText("event-study-next", `下次公布时将使用：${next.name}；${summaries.join("，")}`);
 }
 
 function renderEventRunBanner(eventRun) {
@@ -831,8 +871,51 @@ async function refreshMacroEvents() {
   }
 }
 
+function reactionSigma(item) {
+  const value = numberOrNull(item ? item.sigma : null);
+  return value === null ? "—" : `${value >= 0 ? "+" : ""}${value.toFixed(2)}σ`;
+}
+
+async function refreshEventReactions() {
+  const category = document.getElementById("reaction-category").value;
+  const symbol = document.getElementById("reaction-symbol").value;
+  const params = new URLSearchParams({ category, symbol, limit: "200" });
+  let rows = [];
+  let stats = [];
+  try {
+    [rows, stats] = await Promise.all([
+      getJson(`${ENDPOINTS.eventReactions}?${params.toString()}`),
+      getJson(`${ENDPOINTS.eventStudy}?category=${encodeURIComponent(category)}`),
+    ]);
+  } catch (error) { return; }
+  const body = document.querySelector("#event-reactions-table tbody");
+  clear(body);
+  const stat = stats.find((row) => row.symbol === symbol);
+  setText("reaction-summary", stat
+    ? `过去 ${stat.n} 次（滚动检验 ${stat.wf_n || 0} 次可预测）：命中率 ${percent(stat.wf_view_hit_rate, 0)}，按预测方向平均 ${numberOrNull(stat.wf_view_mean) === null ? "—" : `${Number(stat.wf_view_mean) >= 0 ? "+" : ""}${Number(stat.wf_view_mean).toFixed(2)}σ`}；当前${stat.wf_views >= stat.min_wf_views && stat.wf_view_hit_rate >= stat.min_wf_hit_rate && stat.wf_view_mean > 0 ? "满足" : "不满足"}生成推荐门槛`
+    : `过去 ${rows.length} 次；当前没有可用统计。`);
+  for (const row of rows) {
+    const reaction = row.reaction || {};
+    const prediction = row.prediction || {};
+    const expected = numberOrNull(prediction.expected_after_sigma);
+    const realized = reaction.after ? numberOrNull(reaction.after.sigma) : null;
+    const hit = expected === null || realized === null ? "—" : expected * realized > 0 ? "是" : "否";
+    const ivChange = row.vol ? numberOrNull(row.vol.change) : null;
+    body.appendChild(el("tr", {}, [
+      el("td", { text: row.event_date }),
+      el("td", { text: `${row.actual ?? "—"} / ${row.forecast ?? "—"}` }),
+      el("td", { className: "num", text: numberOrNull(row.z) === null ? "—" : `${Number(row.z) >= 0 ? "+" : ""}${Number(row.z).toFixed(2)}σ` }),
+      el("td", { className: "num", text: reactionSigma(reaction.gap) }),
+      el("td", { className: "num", text: reaction.after ? `${reaction.after_label || "开盘后"} ${reactionSigma(reaction.after)}` : row.status === "partial" ? "等待次日收盘" : "—" }),
+      el("td", { className: "num", text: expected === null ? "—" : `${expected >= 0 ? "+" : ""}${expected.toFixed(2)}σ` }),
+      el("td", { text: hit }),
+      el("td", { className: "num", text: ivChange === null ? "—" : `${ivChange >= 0 ? "+" : ""}${ivChange.toFixed(3)}` }),
+    ]));
+  }
+}
+
 async function refreshCalendar() {
-  await Promise.all([refreshMacroEvents(), refreshEarnings()]);
+  await Promise.all([refreshMacroEvents(), refreshEventReactions(), refreshEarnings()]);
 }
 
 async function triggerRun() {
@@ -867,6 +950,8 @@ document.getElementById("tracking-status").addEventListener("change", refreshTra
 document.getElementById("tracking-group").addEventListener("change", () => renderTrackingGroups((appState.tracking || {}).stats || {}));
 document.getElementById("calendar-importance").addEventListener("change", refreshMacroEvents);
 document.getElementById("calendar-days").addEventListener("change", refreshMacroEvents);
+document.getElementById("reaction-category").addEventListener("change", refreshEventReactions);
+document.getElementById("reaction-symbol").addEventListener("change", refreshEventReactions);
 document.querySelectorAll("#tabs button").forEach((button) => button.addEventListener("click", () => switchTab(button.dataset.tab)));
 
 refreshStatus();

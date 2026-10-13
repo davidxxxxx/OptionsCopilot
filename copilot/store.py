@@ -14,7 +14,7 @@ from copilot.analysis.tagging import NewsTag
 from copilot.news.macro_calendar import MacroEvent
 from copilot.news.models import EarningsEvent, NewsItem
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS news(
@@ -177,6 +177,25 @@ CREATE TABLE IF NOT EXISTS event_stats(
     computed_at TEXT NOT NULL,
     PRIMARY KEY(category, symbol)
 );
+CREATE TABLE IF NOT EXISTS event_reactions(
+    event_date TEXT NOT NULL,
+    category TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    event_time TEXT NOT NULL,
+    title TEXT NOT NULL,
+    actual REAL,
+    forecast REAL,
+    surprise REAL,
+    z REAL,
+    prediction TEXT,
+    reaction TEXT,
+    vol TEXT,
+    status TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(event_date, category, symbol)
+);
+CREATE INDEX IF NOT EXISTS event_reactions_latest
+ON event_reactions(category, symbol, event_date DESC);
 """
 
 
@@ -633,6 +652,7 @@ class Store:
         values = list(rows)
         stamp = _now()
         with self._tx() as db:
+            db.execute("DELETE FROM event_stats")
             for payload in values:
                 db.execute(
                     "INSERT OR REPLACE INTO event_stats(category, symbol, payload, computed_at)"
@@ -652,6 +672,74 @@ class Store:
             {**json.loads(row["payload"]), "computed_at": row["computed_at"]}
             for row in self._rows(sql, params)
         ]
+
+    def event_stats_are_current(self, stats_version: int) -> bool:
+        rows = self._rows("SELECT payload FROM event_stats")
+        return bool(rows) and all(
+            json.loads(row["payload"]).get("stats_version") == stats_version for row in rows
+        )
+
+    def upsert_event_reaction(self, payload: dict[str, Any]) -> None:
+        """Save one event occurrence while preserving its first prediction and z-score."""
+
+        stamp = _now()
+        with self._tx() as db:
+            db.execute(
+                "INSERT INTO event_reactions("
+                " event_date, category, symbol, event_time, title, actual, forecast, surprise, z,"
+                " prediction, reaction, vol, status, updated_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                " ON CONFLICT(event_date, category, symbol) DO UPDATE SET"
+                " event_time=excluded.event_time, title=excluded.title,"
+                " actual=excluded.actual, forecast=excluded.forecast, surprise=excluded.surprise,"
+                " z=event_reactions.z, prediction=event_reactions.prediction,"
+                " reaction=COALESCE(excluded.reaction, event_reactions.reaction),"
+                " vol=COALESCE(excluded.vol, event_reactions.vol),"
+                " status=CASE"
+                "  WHEN event_reactions.status='complete' THEN 'complete'"
+                "  WHEN excluded.status='complete' THEN 'complete'"
+                "  WHEN event_reactions.status='partial' OR excluded.status='partial' THEN 'partial'"
+                "  ELSE 'predicted' END,"
+                " updated_at=excluded.updated_at",
+                (
+                    str(payload["event_date"]), payload["category"], payload["symbol"],
+                    str(payload["event_time"]), payload["title"], payload.get("actual"),
+                    payload.get("forecast"), payload.get("surprise"), payload.get("z"),
+                    _dumps(payload["prediction"]) if payload.get("prediction") is not None else None,
+                    _dumps(payload["reaction"]) if payload.get("reaction") is not None else None,
+                    _dumps(payload["vol"]) if payload.get("vol") is not None else None,
+                    payload["status"], stamp,
+                ),
+            )
+
+    def event_reactions(
+        self,
+        *,
+        category: str | None = None,
+        symbol: str | None = None,
+        limit: int = 200,
+        incomplete_only: bool = False,
+    ) -> list[dict[str, Any]]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if category:
+            clauses.append("category=?")
+            params.append(category)
+        if symbol:
+            clauses.append("symbol=?")
+            params.append(symbol)
+        if incomplete_only:
+            clauses.append("status!='complete'")
+        sql = "SELECT * FROM event_reactions"
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY event_date DESC, category, symbol LIMIT ?"
+        params.append(limit)
+        return [_event_reaction_row(row) for row in self._rows(sql, params)]
+
+    def event_reactions_empty(self) -> bool:
+        rows = self._rows("SELECT 1 FROM event_reactions LIMIT 1")
+        return not rows
 
     def tagged_news_after_id(self, news_id: int) -> list[tuple[NewsItem, NewsTag]]:
         rows = self._rows(
@@ -688,6 +776,22 @@ class Store:
             (symbol, limit),
         )
         return [_market_state_row(row) for row in rows]
+
+    def market_state_on(self, symbol: str, as_of: date) -> dict[str, Any] | None:
+        rows = self._rows(
+            "SELECT symbol, as_of, payload, updated_at FROM market_state"
+            " WHERE symbol=? AND as_of=?",
+            (symbol, as_of.isoformat()),
+        )
+        return _market_state_row(rows[0]) if rows else None
+
+    def latest_market_state_before(self, symbol: str, as_of: date) -> dict[str, Any] | None:
+        rows = self._rows(
+            "SELECT symbol, as_of, payload, updated_at FROM market_state"
+            " WHERE symbol=? AND as_of<? ORDER BY as_of DESC LIMIT 1",
+            (symbol, as_of.isoformat()),
+        )
+        return _market_state_row(rows[0]) if rows else None
 
     def previous_ideas(self, before_run_id: int, since: datetime) -> list[dict[str, Any]]:
         """Ideas of the most recent finished run before ``before_run_id`` that had any."""
@@ -913,6 +1017,25 @@ def _market_state_row(row: sqlite3.Row) -> dict[str, Any]:
         **json.loads(row["payload"]),
         "symbol": row["symbol"],
         "as_of": row["as_of"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def _event_reaction_row(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "event_date": row["event_date"],
+        "category": row["category"],
+        "symbol": row["symbol"],
+        "event_time": row["event_time"],
+        "title": row["title"],
+        "actual": row["actual"],
+        "forecast": row["forecast"],
+        "surprise": row["surprise"],
+        "z": row["z"],
+        "prediction": json.loads(row["prediction"]) if row["prediction"] else None,
+        "reaction": json.loads(row["reaction"]) if row["reaction"] else None,
+        "vol": json.loads(row["vol"]) if row["vol"] else None,
+        "status": row["status"],
         "updated_at": row["updated_at"],
     }
 

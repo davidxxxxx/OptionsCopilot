@@ -210,6 +210,10 @@ def run_pipeline(
                 now=now,
                 settings=settings.events,
             )
+            if event_study is not None:
+                _record_live_event_reactions(
+                    store, event_study, settings.events.study_symbols
+                )
         macro_summary, stages["brief"] = _refresh_brief(store, llm, tagged, now, major_banner)
         stages["views"] = {
             "status": "ledger",
@@ -568,6 +572,63 @@ def _macro_window(today: date, days_ahead: int) -> tuple[datetime, datetime]:
     end_day = today + timedelta(days=days_ahead + 1)
     end = datetime.combine(end_day, datetime.min.time(), NEW_YORK).astimezone(timezone.utc)
     return start, end
+
+
+def _record_live_event_reactions(
+    store: Store,
+    event_study: dict[str, Any],
+    symbols: Sequence[str],
+) -> None:
+    """Freeze the first live prediction for every configured study symbol."""
+
+    event = event_study["event"]
+    event_date = datetime.fromisoformat(event["time"]).astimezone(NEW_YORK).date()
+    by_symbol = {row["symbol"]: row for row in event_study.get("rows", ())}
+    for symbol in symbols:
+        row = by_symbol.get(symbol)
+        prediction = None
+        if row is not None and row.get("expected_after_sigma") is not None:
+            prediction = {
+                "source": "live",
+                "expected_after_sigma": row.get("expected_after_sigma"),
+                "expected_after_pct": row.get("expected_after_pct"),
+                "beta": row.get("beta_shrunk_after"),
+                "t": row.get("t_after"),
+                "stable": row.get("stable_after") is True,
+                "generated_view": row.get("generated") is True,
+                "stats_version": row.get("stats_version"),
+            }
+        before = store.latest_market_state_before(symbol, event_date)
+        event_day = store.market_state_on(symbol, event_date)
+        before_iv = before.get("iv_30d") if before else None
+        event_iv = event_day.get("iv_30d") if event_day else None
+        vol = None
+        if before_iv is not None or event_iv is not None:
+            vol = {
+                "before_date": before.get("as_of") if before else None,
+                "before_iv_30d": before_iv,
+                "event_date": event_day.get("as_of") if event_day else None,
+                "event_iv_30d": event_iv,
+                "change": (
+                    float(event_iv) - float(before_iv)
+                    if event_iv is not None and before_iv is not None else None
+                ),
+            }
+        store.upsert_event_reaction({
+            "event_date": event_date.isoformat(),
+            "category": event["category"],
+            "symbol": symbol,
+            "event_time": event["time"],
+            "title": event["title"],
+            "actual": event.get("actual"),
+            "forecast": event.get("forecast"),
+            "surprise": event.get("surprise"),
+            "z": event.get("z"),
+            "prediction": prediction,
+            "reaction": None,
+            "vol": vol,
+            "status": "predicted",
+        })
 
 
 def _macro_dates(events: Sequence[dict[str, Any]]) -> tuple[date, ...]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import statistics
+from collections.abc import Mapping
 from types import SimpleNamespace
 from dataclasses import replace
 from datetime import date, datetime, time, timedelta, timezone
@@ -8,10 +9,16 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from copilot.analysis.event_study import build_macro_views, compute_event_stats, surprise_rows
+from copilot.analysis.event_study import (
+    EVENT_STATS_VERSION,
+    build_macro_views,
+    compute_event_stats,
+    event_payload,
+    surprise_rows,
+)
 from copilot.config import EventSettings
 from copilot.news.macro_calendar import MacroEvent
-from copilot.runtime import Runtime
+from copilot.runtime import Runtime, event_study_refresh_needed
 from copilot.scheduler import RunManager
 from copilot.secrets import Secrets
 
@@ -29,8 +36,13 @@ def _trading_days(start: date, count: int) -> list[date]:
 
 
 def _events(days: list[date], *, category: str = "cpi", release_time: time = time(8, 30)) -> list[MacroEvent]:
-    surprises = (-6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6)
-    title = "Fed Interest Rate Decision" if category == "fomc_decision" else "Core Inflation Rate MoM"
+    negative_count = (len(days) + 1) // 2
+    positive_count = len(days) - negative_count
+    surprises = tuple(range(-negative_count, 0)) + tuple(range(1, positive_count + 1))
+    title = {
+        "fomc_decision": "Fed Interest Rate Decision",
+        "gdp": "GDP Growth Rate QoQ Adv",
+    }.get(category, "Core Inflation Rate MoM")
     return [
         MacroEvent(
             source="tradingview",
@@ -48,7 +60,12 @@ def _events(days: list[date], *, category: str = "cpi", release_time: time = tim
 
 
 def _bars_with_known_reaction(
-    days: list[date], events: list[MacroEvent], *, beta_gap: float, beta_after: float
+    days: list[date],
+    events: list[MacroEvent],
+    *,
+    beta_gap: float,
+    beta_after: float,
+    beta_after_by_day: Mapping[date, float] | None = None,
 ) -> list[tuple[date, float, float, float, float]]:
     z_by_day = {
         row["event"].event_time.astimezone(NY).date(): float(row["z"])
@@ -63,7 +80,8 @@ def _bars_with_known_reaction(
             vol = statistics.stdev(returns)
             z = z_by_day[day]
             open_price = previous * (1 + beta_gap * z * vol)
-            close = open_price * (1 + beta_after * z * vol)
+            reaction_beta = (beta_after_by_day or {}).get(day, beta_after)
+            close = open_price * (1 + reaction_beta * z * vol)
         else:
             close = previous * (1 + (0.01 if index % 2 else -0.01))
             open_price = previous
@@ -77,13 +95,15 @@ def test_event_study_recovers_known_slope_t_and_shrinkage() -> None:
     events = _events(event_days)
     bars = _bars_with_known_reaction(days, events, beta_gap=0.2, beta_after=0.6)
 
-    stats = compute_event_stats("cpi", "SPY", events, bars, shrink_k=10)
+    stats = compute_event_stats("cpi", "SPY", events, bars, shrink_k=10, min_half_t=1)
 
     assert stats is not None
     assert stats["n"] == 12
     assert stats["beta_gap"] == pytest.approx(0.2, abs=0.02)
     assert stats["beta_after"] == pytest.approx(0.6, abs=0.03)
     assert stats["t_after"] > 10
+    assert stats["stable_after"] is True
+    assert stats["stats_version"] == EVENT_STATS_VERSION
     assert stats["beta_shrunk_after"] == pytest.approx(stats["beta_after"] * 12 / 22)
     assert stats["mean_trailing_vol"] > 0
     assert stats["abs_move_ratio"] > 0
@@ -109,7 +129,7 @@ def test_event_study_uses_next_day_for_in_session_release() -> None:
         next_close = current[4] * (1 + 0.5 * z * vol)
         mutable[index + 1] = (next_row[0], current[4], max(current[4], next_close), min(current[4], next_close), next_close)
 
-    stats = compute_event_stats("cpi", "QQQ", events, mutable, shrink_k=0)
+    stats = compute_event_stats("cpi", "QQQ", events, mutable, shrink_k=0, min_half_t=1)
 
     assert stats is not None
     assert stats["after_label"] == "次日"
@@ -121,12 +141,17 @@ def test_fomc_reports_reaction_ratio_without_surprise_slope() -> None:
     events = _events(days[30:330:25], category="fomc_decision", release_time=time(14, 0))
     bars = _bars_with_known_reaction(days, events, beta_gap=0.2, beta_after=0.4)
 
-    stats = compute_event_stats("fomc_decision", "TLT", events, bars, shrink_k=10)
+    stats = compute_event_stats(
+        "fomc_decision", "TLT", events, bars, shrink_k=10, min_half_t=1
+    )
 
     assert stats is not None
     assert stats["beta_gap"] is None
     assert stats["beta_after"] is None
     assert stats["t_after"] is None
+    assert stats["t_after_first"] is None
+    assert stats["t_after_second"] is None
+    assert stats["stable_after"] is False
     assert stats["abs_move_ratio"] is not None
 
 
@@ -135,19 +160,26 @@ def test_macro_view_filters_n_and_t_and_sets_origin_key() -> None:
     historical_days = _trading_days(date(2025, 1, 2), 12)
     events = _events(historical_days[:-1] + [now.date()])
     base = {
+        "stats_version": EVENT_STATS_VERSION,
         "category": "cpi",
         "n": 12,
         "beta_shrunk_gap": 0.1,
         "beta_shrunk_after": 0.5,
-        "t_after": 2.5,
+        "t_after": 3.5,
+        "t_after_first": 2.0,
+        "t_after_second": 2.1,
+        "stable_after": True,
         "after_label": "开盘后",
         "mean_trailing_vol": 0.01,
         "abs_move_ratio": 1.4,
+        "wf_views": 8,
+        "wf_view_hit_rate": 0.75,
+        "wf_view_mean": 0.2,
     }
     stats = [
         {**base, "symbol": "SPY"},
         {**base, "symbol": "QQQ", "n": 11},
-        {**base, "symbol": "TLT", "t_after": 1.9},
+        {**base, "symbol": "TLT", "t_after": 2.9},
     ]
 
     views, payload = build_macro_views(events, stats, now=now, settings=EventSettings())
@@ -162,6 +194,14 @@ def test_macro_view_filters_n_and_t_and_sets_origin_key() -> None:
     }
     spy = next(row for row in payload["rows"] if row["symbol"] == "SPY")
     assert spy["expected_after_pct"] == pytest.approx(spy["expected_after_sigma"] * 0.01)
+    assert spy["stable"] is True
+    assert payload["thresholds"] == {
+        "min_events": 12,
+        "min_t": 3.0,
+        "min_half_t": 1.0,
+        "min_wf_views": 8,
+        "min_wf_hit_rate": 0.55,
+    }
 
 
 def test_premarket_macro_view_expires_at_same_day_close() -> None:
@@ -169,8 +209,10 @@ def test_premarket_macro_view_expires_at_same_day_close() -> None:
     days = _trading_days(date(2025, 1, 2), 12)
     events = _events(days[:-1] + [release_day])
     stats = [{
-        "category": "cpi", "symbol": "SPY", "n": 12,
-        "beta_shrunk_after": 0.5, "t_after": 3.0, "mean_trailing_vol": 0.01,
+        "stats_version": EVENT_STATS_VERSION, "category": "cpi", "symbol": "SPY", "n": 12,
+        "beta_shrunk_after": 0.5, "t_after": 3.0, "stable_after": True,
+        "mean_trailing_vol": 0.01,
+        "wf_views": 8, "wf_view_hit_rate": 0.75, "wf_view_mean": 0.2,
     }]
 
     active, payload = build_macro_views(
@@ -194,8 +236,10 @@ def test_in_session_macro_view_expires_at_next_trading_day_close() -> None:
     days = _trading_days(date(2025, 1, 2), 12)
     events = _events(days[:-1] + [friday], release_time=time(14, 0))
     stats = [{
-        "category": "cpi", "symbol": "SPY", "n": 12,
-        "beta_shrunk_after": 0.5, "t_after": 3.0, "mean_trailing_vol": 0.01,
+        "stats_version": EVENT_STATS_VERSION, "category": "cpi", "symbol": "SPY", "n": 12,
+        "beta_shrunk_after": 0.5, "t_after": 3.0, "stable_after": True,
+        "mean_trailing_vol": 0.01,
+        "wf_views": 8, "wf_view_hit_rate": 0.75, "wf_view_mean": 0.2,
     }]
 
     friday_views, _ = build_macro_views(
@@ -254,3 +298,122 @@ def test_event_study_refresh_refetches_recent_revised_actual(settings, store) ->
     source.revised = True
     runtime._refresh_event_study_now()
     assert store.macro_events_between(start, end)[0].actual == "0.4"
+
+
+def test_opposite_half_slopes_are_unstable_and_do_not_generate_view() -> None:
+    days = _trading_days(date(2024, 1, 2), 340)
+    event_days = days[30:330:25]
+    events = _events(event_days)
+    split_betas = {
+        day: (1.0 if index < len(event_days) // 2 else -0.01)
+        for index, day in enumerate(event_days)
+    }
+    bars = _bars_with_known_reaction(
+        days, events, beta_gap=0.2, beta_after=0.0, beta_after_by_day=split_betas
+    )
+    stats = compute_event_stats("cpi", "SPY", events, bars, shrink_k=0, min_half_t=1)
+
+    assert stats is not None
+    assert abs(stats["t_after"]) >= 3
+    assert stats["beta_after_first"] > 0
+    assert stats["beta_after_second"] < 0
+    assert stats["stable_after"] is False
+    views, _payload = build_macro_views(
+        events,
+        [stats],
+        now=datetime.combine(event_days[-1], time(12, 0), NY),
+        settings=EventSettings(),
+    )
+    assert views == {}
+
+
+def test_stable_half_slopes_generate_view() -> None:
+    days = _trading_days(date(2024, 1, 2), 340)
+    event_days = days[30:330:25]
+    events = _events(event_days)
+    bars = _bars_with_known_reaction(days, events, beta_gap=0.2, beta_after=0.6)
+    stats = compute_event_stats("cpi", "SPY", events, bars, shrink_k=0, min_half_t=1)
+
+    assert stats is not None
+    assert abs(stats["t_after"]) >= 3
+    assert stats["stable_after"] is True
+    stats.update({"wf_views": 8, "wf_view_hit_rate": 0.75, "wf_view_mean": 0.2})
+    views, _payload = build_macro_views(
+        events,
+        [stats],
+        now=datetime.combine(event_days[-1], time(12, 0), NY),
+        settings=EventSettings(),
+    )
+    assert set(views) == {("macro", "SPY")}
+
+
+def test_stable_t_between_two_and_three_does_not_generate_view() -> None:
+    now = datetime(2026, 10, 13, 12, 0, tzinfo=NY)
+    days = _trading_days(date(2025, 1, 2), 12)
+    events = _events(days[:-1] + [now.date()])
+    stats = [{
+        "stats_version": EVENT_STATS_VERSION,
+        "category": "cpi",
+        "symbol": "SPY",
+        "n": 12,
+        "beta_shrunk_after": 0.5,
+        "t_after": 2.5,
+        "t_after_first": 1.5,
+        "t_after_second": 1.4,
+        "stable_after": True,
+        "mean_trailing_vol": 0.01,
+    }]
+
+    views, payload = build_macro_views(events, stats, now=now, settings=EventSettings())
+
+    assert views == {}
+    assert payload is not None and payload["rows"][0]["generated"] is False
+
+
+def test_halves_with_fewer_than_four_observations_are_unstable() -> None:
+    days = _trading_days(date(2024, 1, 2), 180)
+    events = _events(days[30:180:25])[:6]
+    bars = _bars_with_known_reaction(days, events, beta_gap=0.2, beta_after=0.6)
+
+    stats = compute_event_stats("cpi", "SPY", events, bars, shrink_k=0, min_half_t=1)
+
+    assert stats is not None and stats["n"] == 6
+    assert stats["stable_after"] is False
+
+
+def test_gdp_stats_and_event_payload_include_caveat_but_cpi_does_not() -> None:
+    days = _trading_days(date(2024, 1, 2), 340)
+    event_days = days[30:330:25]
+    gdp_events = _events(event_days, category="gdp")
+    bars = _bars_with_known_reaction(days, gdp_events, beta_gap=0.2, beta_after=0.6)
+
+    stats = compute_event_stats("gdp", "SPY", gdp_events, bars, shrink_k=10, min_half_t=1)
+    gdp_payload = event_payload(gdp_events[-1], 1.0, 0.2)
+    cpi_payload = event_payload(_events(event_days)[-1], 1.0, 0.2)
+
+    assert stats is not None and "财报干扰" in stats["caveat"]
+    assert gdp_payload["caveat"] == stats["caveat"]
+    assert cpi_payload["caveat"] is None
+
+
+def test_missing_or_old_stats_version_never_qualifies_and_requests_refresh(store) -> None:
+    now = datetime(2026, 10, 13, 12, 0, tzinfo=NY)
+    days = _trading_days(date(2025, 1, 2), 12)
+    events = _events(days[:-1] + [now.date()])
+    base = {
+        "category": "cpi", "symbol": "SPY", "n": 12,
+        "beta_shrunk_after": 0.5, "t_after": 4.0, "stable_after": True,
+        "mean_trailing_vol": 0.01,
+    }
+
+    missing_views, _ = build_macro_views(events, [base], now=now, settings=EventSettings())
+    old_views, _ = build_macro_views(
+        events, [{**base, "stats_version": EVENT_STATS_VERSION - 1}],
+        now=now, settings=EventSettings(),
+    )
+    assert missing_views == {} and old_views == {}
+
+    store.replace_event_stats([{**base, "stats_version": EVENT_STATS_VERSION - 1}])
+    assert event_study_refresh_needed(store) is True
+    store.replace_event_stats([{**base, "stats_version": EVENT_STATS_VERSION}])
+    assert event_study_refresh_needed(store) is False

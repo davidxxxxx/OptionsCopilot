@@ -833,6 +833,7 @@ def _seed_event_study(store: Store) -> None:
         events,
     )
     store.replace_event_stats([{
+        "stats_version": 3,
         "category": "cpi",
         "symbol": "SPY",
         "n": 18,
@@ -851,6 +852,18 @@ def _seed_event_study(store: Store) -> None:
         "se_after": 0.3,
         "t_after": 4.0,
         "beta_shrunk_after": 0.9,
+        "beta_after_first": 1.1,
+        "t_after_first": 3.2,
+        "beta_after_second": 1.3,
+        "t_after_second": 3.4,
+        "stable_after": True,
+        "wf_n": 12,
+        "wf_views": 8,
+        "wf_hit_rate": 0.75,
+        "wf_corr": 0.8,
+        "wf_corr_t": 3.5,
+        "wf_view_hit_rate": 0.75,
+        "wf_view_mean": 0.4,
     }])
 
 
@@ -922,6 +935,16 @@ def test_event_study_is_separate_and_main_top10_is_identical(settings, tmp_path)
         assert client.get("/api/event-study?category=cpi").json()[0]["symbol"] == "SPY"
         latest = client.get("/api/event-study/latest")
         assert latest.status_code == 200 and latest.json()["event"]["category"] == "cpi"
+        assert latest.json()["thresholds"] == {
+            "min_events": enabled_settings.events.min_events,
+            "min_t": enabled_settings.events.min_t,
+            "min_half_t": enabled_settings.events.min_half_t,
+            "min_wf_views": enabled_settings.events.min_wf_views,
+            "min_wf_hit_rate": enabled_settings.events.min_wf_hit_rate,
+        }
+        reactions = client.get("/api/event-reactions?category=cpi&symbol=SPY&limit=10")
+        assert reactions.status_code == 200
+        assert reactions.json()[0]["prediction"]["source"] == "live"
         event_status = client.get("/api/status").json()["latest_event_run"]
         assert event_status["id"] == enabled_run["id"]
         assert event_status["reason"] == reason

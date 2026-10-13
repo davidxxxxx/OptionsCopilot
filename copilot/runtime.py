@@ -7,14 +7,26 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from dataclasses import field
 from logging.handlers import RotatingFileHandler
+from typing import Any
 from zoneinfo import ZoneInfo
 
-from copilot.analysis.event_study import STUDY_INDICATORS, compute_event_stats
+from copilot.analysis.event_study import (
+    EVENT_STATS_VERSION,
+    STUDY_INDICATORS,
+    compute_event_stats,
+    reaction_observations,
+    walk_forward_evaluation,
+)
 from copilot.analysis.deepseek import DeepSeekClient
 from copilot.config import Settings, load_settings
 from copilot.market.cboe import CboeClient
 from copilot.market.ibkr import IbkrMarket
-from copilot.market.nasdaq_history import daily_bars, daily_closes, weekly_cache_date
+from copilot.market.nasdaq_history import (
+    daily_bars,
+    daily_closes,
+    merge_daily_bars,
+    weekly_cache_date,
+)
 from copilot.news.collect import NewsSources, build_sources, collect_news
 from copilot.pipeline import PipelineDeps, run_pipeline, tag_pending_news
 from copilot.scheduler import RunManager, Scheduler
@@ -114,21 +126,27 @@ class Runtime:
             events = self.store.macro_events_between(start_at, end_at)
             cache_day = weekly_cache_date(today)
             stats = []
+            bars_by_symbol: dict[str, list[tuple[date, float, float, float, float]]] = {}
             for symbol in self.settings.events.study_symbols:
                 cached = self.store.get_daily_cache(symbol, "NASDAQ_OHLC", cache_day)
                 if cached is None:
                     bars = daily_bars(symbol, today=today, start=EVENT_HISTORY_START)
-                    self.store.put_daily_cache(
-                        symbol,
-                        "NASDAQ_OHLC",
-                        cache_day,
-                        [[day.isoformat(), open_, high, low, close] for day, open_, high, low, close in bars],
-                    )
                 else:
                     bars = [
                         (date.fromisoformat(row[0]), *[float(value) for value in row[1:]])
                         for row in cached
                     ]
+                recent = daily_bars(symbol, today=today, start=today - timedelta(days=15))
+                bars = merge_daily_bars(bars, recent)
+                bars_by_symbol[symbol] = bars
+                self.store.put_daily_cache(
+                    symbol,
+                    "NASDAQ_OHLC",
+                    cache_day,
+                    [[day.isoformat(), open_, high, low, close] for day, open_, high, low, close in bars],
+                )
+            sync_event_reactions(self.store, events, bars_by_symbol, self.settings)
+            for symbol, bars in bars_by_symbol.items():
                 for category in STUDY_INDICATORS:
                     payload = compute_event_stats(
                         category,
@@ -136,6 +154,12 @@ class Runtime:
                         events,
                         bars,
                         shrink_k=self.settings.events.shrink_k,
+                        min_half_t=self.settings.events.min_half_t,
+                        recency_half_life=self.settings.events.recency_half_life,
+                        min_events=self.settings.events.min_events,
+                        min_t=self.settings.events.min_t,
+                        min_wf_views=self.settings.events.min_wf_views,
+                        min_wf_hit_rate=self.settings.events.min_wf_hit_rate,
                     )
                     if payload is not None:
                         stats.append(payload)
@@ -217,9 +241,118 @@ def build_runtime(
             universe=settings.universe,
             refresh_event_study=runtime.refresh_event_study,
         )
-    if settings.events.enabled and not store.event_stats():
+    if settings.events.enabled and event_study_refresh_needed(store):
         runtime.refresh_event_study()
     return runtime
+
+
+def event_study_refresh_needed(store: Store) -> bool:
+    return not store.event_stats_are_current(EVENT_STATS_VERSION)
+
+
+def backfill_event_reactions(
+    store: Store,
+    events: list,
+    bars_by_symbol: dict[str, list[tuple[date, float, float, float, float]]],
+    settings: Settings,
+) -> None:
+    """Insert missing releases with honest expanding-window historical predictions."""
+
+    existing = {
+        (row["event_date"], row["category"], row["symbol"])
+        for row in store.event_reactions(limit=100_000)
+    }
+    for symbol, bars in bars_by_symbol.items():
+        for category in STUDY_INDICATORS:
+            evaluation = walk_forward_evaluation(
+                category,
+                events,
+                bars,
+                shrink_k=settings.events.shrink_k,
+                min_events=settings.events.min_events,
+                min_t=settings.events.min_t,
+                min_half_t=settings.events.min_half_t,
+                recency_half_life=settings.events.recency_half_life,
+            )
+            for row in evaluation["predictions"]:
+                event = row["event"]
+                observation = row["observation"]
+                key = (row["event_date"].isoformat(), category, symbol)
+                if key in existing:
+                    continue
+                store.upsert_event_reaction({
+                    "event_date": row["event_date"].isoformat(),
+                    "category": category,
+                    "symbol": symbol,
+                    "event_time": event.event_time.isoformat(),
+                    "title": event.title,
+                    "actual": row["actual"],
+                    "forecast": row["forecast"],
+                    "surprise": row["surprise"],
+                    "z": row["z"],
+                    "prediction": row["prediction"],
+                    "reaction": observation["reaction"] if observation else None,
+                    "vol": _event_vol(store, symbol, row["event_date"]),
+                    "status": observation["status"] if observation else "predicted",
+                })
+                existing.add(key)
+
+
+def finalize_event_reactions(
+    store: Store,
+    events: list,
+    bars_by_symbol: dict[str, list[tuple[date, float, float, float, float]]],
+) -> None:
+    """Advance predicted rows to partial or complete when Nasdaq bars exist."""
+
+    pending = store.event_reactions(limit=100_000, incomplete_only=True)
+    pending_keys = {
+        (row["event_date"], row["category"], row["symbol"]): row for row in pending
+    }
+    for symbol, bars in bars_by_symbol.items():
+        for category in STUDY_INDICATORS:
+            for observation in reaction_observations(category, events, bars):
+                key = (observation["date"].isoformat(), category, symbol)
+                existing = pending_keys.get(key)
+                if existing is None:
+                    continue
+                store.upsert_event_reaction({
+                    **existing,
+                    "reaction": observation["reaction"],
+                    "vol": _event_vol(store, symbol, observation["date"]),
+                    "status": observation["status"],
+                })
+
+
+def sync_event_reactions(
+    store: Store,
+    events: list,
+    bars_by_symbol: dict[str, list[tuple[date, float, float, float, float]]],
+    settings: Settings,
+) -> None:
+    """Finalize known rows, then backfill releases missed by live event runs."""
+
+    finalize_event_reactions(store, events, bars_by_symbol)
+    backfill_event_reactions(store, events, bars_by_symbol, settings)
+
+
+def _event_vol(store: Store, symbol: str, event_date: date) -> dict[str, Any] | None:
+    before = store.latest_market_state_before(symbol, event_date)
+    event_day = store.market_state_on(symbol, event_date)
+    before_iv = before.get("iv_30d") if before else None
+    event_iv = event_day.get("iv_30d") if event_day else None
+    if before_iv is None and event_iv is None:
+        return None
+    return {
+        "before_date": before.get("as_of") if before else None,
+        "before_iv_30d": before_iv,
+        "event_date": event_day.get("as_of") if event_day else None,
+        "event_iv_30d": event_iv,
+        "change": (
+            float(event_iv) - float(before_iv)
+            if event_iv is not None and before_iv is not None else None
+        ),
+    }
 
 
 def configure_logging(settings: Settings) -> None:
@@ -236,4 +369,8 @@ def configure_logging(settings: Settings) -> None:
     root.setLevel(logging.INFO)
 
 
-__all__ = ["Runtime", "build_runtime", "configure_logging", "make_deps"]
+__all__ = [
+    "Runtime", "backfill_event_reactions", "build_runtime", "configure_logging",
+    "event_study_refresh_needed", "finalize_event_reactions", "make_deps",
+    "sync_event_reactions",
+]

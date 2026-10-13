@@ -163,6 +163,18 @@ def create_app(runtime: Runtime) -> FastAPI:
     def event_study(category: str | None = None) -> list[dict[str, Any]]:
         return store.event_stats(category or None)
 
+    @app.get("/api/event-reactions")
+    def event_reactions(
+        category: str | None = None,
+        symbol: str | None = None,
+        limit: int = Query(100, ge=1, le=1000),
+    ) -> list[dict[str, Any]]:
+        return store.event_reactions(
+            category=category or None,
+            symbol=symbol.upper() if symbol else None,
+            limit=limit,
+        )
+
     @app.get("/api/event-study/latest")
     def latest_event_study() -> dict[str, Any]:
         payload = store.latest_snapshot("event_study", "latest")

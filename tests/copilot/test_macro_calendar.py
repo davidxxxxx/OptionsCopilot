@@ -159,7 +159,7 @@ def test_replace_macro_events_removes_rescheduled_rows_only_in_source_window(sto
     assert {row.source_id for row in rows} == {"replacement", "outside", "fed"}
 
 
-def test_schema_v3_to_v5_preserves_existing_rows(tmp_path: Path) -> None:
+def test_schema_v3_to_v6_preserves_existing_rows(tmp_path: Path) -> None:
     path = tmp_path / "schema-v3.sqlite3"
     original = Store(path)
     original.add_news([NewsItem("jin10", "kept", datetime(2026, 10, 13, tzinfo=UTC), "保留")])
@@ -170,7 +170,7 @@ def test_schema_v3_to_v5_preserves_existing_rows(tmp_path: Path) -> None:
     try:
         assert upgraded.recent_news(datetime(2026, 1, 1, tzinfo=UTC))[0].title == "保留"
         with sqlite3.connect(path) as db:
-            assert db.execute("PRAGMA user_version").fetchone()[0] == 5
+            assert db.execute("PRAGMA user_version").fetchone()[0] == 6
             assert db.execute("SELECT name FROM sqlite_master WHERE name='macro_events'").fetchone()
     finally:
         upgraded.close()

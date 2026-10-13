@@ -9,7 +9,7 @@ from copilot.params import SCORING_REVISION, params_payload, params_version
 
 
 def test_params_version_is_stable_and_tracks_only_scoring_settings(settings) -> None:
-    assert SCORING_REVISION == 2
+    assert SCORING_REVISION == 3
     version = params_version(settings)
     assert params_payload(settings)["calendar"] == {
         "catalyst_symbols": list(settings.calendar.catalyst_symbols),
@@ -18,7 +18,11 @@ def test_params_version_is_stable_and_tracks_only_scoring_settings(settings) -> 
         "study_symbols": list(settings.events.study_symbols),
         "min_events": settings.events.min_events,
         "min_t": settings.events.min_t,
+        "min_half_t": settings.events.min_half_t,
         "shrink_k": settings.events.shrink_k,
+        "recency_half_life": settings.events.recency_half_life,
+        "min_wf_views": settings.events.min_wf_views,
+        "min_wf_hit_rate": settings.events.min_wf_hit_rate,
     }
     assert params_version(settings) == version
     assert params_version(replace(
@@ -61,6 +65,28 @@ def test_params_version_is_stable_and_tracks_only_scoring_settings(settings) -> 
     assert params_version(replace(
         settings,
         events=replace(settings.events, min_t=settings.events.min_t + 0.5),
+    )) != version
+    assert params_version(replace(
+        settings,
+        events=replace(settings.events, min_half_t=settings.events.min_half_t + 0.5),
+    )) != version
+    assert params_version(replace(
+        settings,
+        events=replace(
+            settings.events,
+            recency_half_life=settings.events.recency_half_life + 1,
+        ),
+    )) != version
+    assert params_version(replace(
+        settings,
+        events=replace(settings.events, min_wf_views=settings.events.min_wf_views + 1),
+    )) != version
+    assert params_version(replace(
+        settings,
+        events=replace(
+            settings.events,
+            min_wf_hit_rate=settings.events.min_wf_hit_rate + 0.01,
+        ),
     )) != version
 
 

@@ -95,8 +95,14 @@ study_symbols = [
   "XLU", "XLY", "XLP", "XLV", "XLI", "SMH", "KRE", "XHB",
 ]
 min_events = 12
-min_t = 2.0
+min_t = 3.0
+# 前后两半样本各自至少达到的 |t|
+min_half_t = 1.0
 shrink_k = 10.0
+# 越近的事件权重越高；0 表示关闭衰减
+recency_half_life = 36.0
+min_wf_views = 8
+min_wf_hit_rate = 0.55
 
 [llm]
 enabled = true

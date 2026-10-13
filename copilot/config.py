@@ -76,8 +76,12 @@ class EventSettings:
         "XLU", "XLY", "XLP", "XLV", "XLI", "SMH", "KRE", "XHB",
     )
     min_events: int = 12
-    min_t: float = 2.0
+    min_t: float = 3.0
+    min_half_t: float = 1.0
     shrink_k: float = 10.0
+    recency_half_life: float = 36.0
+    min_wf_views: int = 8
+    min_wf_hit_rate: float = 0.55
 
 
 @dataclass(frozen=True)
@@ -297,7 +301,15 @@ def _validate(settings: Settings) -> None:
             raise ValueError(f"invalid event active time: {value}")
     if events.active_start_et >= events.active_end_et:
         raise ValueError("events active window is invalid")
-    if events.min_events < 2 or events.min_t < 0 or events.shrink_k < 0:
+    if (
+        events.min_events < 2
+        or events.min_t < 0
+        or events.min_half_t < 0
+        or events.shrink_k < 0
+        or events.recency_half_life < 0
+        or events.min_wf_views < 0
+        or not 0 <= events.min_wf_hit_rate <= 1
+    ):
         raise ValueError("events study settings are invalid")
     if not 0 <= strategy.tail_weight < 1:
         raise ValueError("strategy.tail_weight must be in [0, 1)")
