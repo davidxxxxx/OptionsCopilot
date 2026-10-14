@@ -206,6 +206,77 @@ def build_candidates(
     return candidates
 
 
+def build_vrp_candidate(
+    chain: OptionChain,
+    settings: StrategySettings,
+    *,
+    today: date,
+    dte_min: int,
+    dte_max: int,
+    short_delta: float,
+    risk_budget: float | None,
+) -> Candidate | None:
+    """Build the single systematic bull-put spread selected by the VRP rule."""
+
+    expiries = [
+        expiry for expiry in chain.expiries()
+        if dte_min <= (expiry - today).days <= dte_max
+    ]
+    if not expiries:
+        return None
+    expiry = min(expiries, key=lambda value: (abs((value - today).days - 38), value))
+    view = View(
+        symbol=chain.underlying.symbol,
+        direction="neutral",
+        conviction=1,
+        expected_move_pct=0.0,
+        horizon_days=38,
+        volatility="neutral",
+        source="vrp",
+        structures=("bull_put_spread",),
+        dte_min=dte_min,
+        dte_max=dte_max,
+    )
+    setup = _ExpirySetup.create(
+        view, chain, expiry, settings, today=today, event_dates=(), catalyst_dates=(),
+        indicative_prices=False,
+    )
+    if setup is None:
+        return None
+    short_options = [
+        item for item in setup.context.puts if 0.15 <= abs(item[1]) <= 0.25
+    ]
+    if not short_options:
+        return None
+    short_quote, _delta = min(
+        short_options,
+        key=lambda item: (abs(abs(item[1]) - short_delta), abs(item[0].strike - setup.spot)),
+    )
+    long_quotes = [
+        quote for quote, _delta in setup.context.puts if quote.strike < short_quote.strike
+    ]
+    if not long_quotes:
+        return None
+    evaluated = [
+        candidate
+        for long_quote in long_quotes
+        if (candidate := setup.evaluate(
+            "bull_put_spread",
+            [setup.context.leg(short_quote, -1), setup.context.leg(long_quote, 1)],
+        )) is not None
+    ]
+    if not evaluated:
+        return None
+    if risk_budget is None:
+        chosen = min(evaluated, key=lambda item: short_quote.strike - item.legs[1].strike)
+    else:
+        fitting = [item for item in evaluated if item.profile.max_loss <= risk_budget]
+        if not fitting:
+            return None
+        chosen = max(fitting, key=lambda item: short_quote.strike - item.legs[1].strike)
+    return replace(chosen, origin="vrp")
+
+
 def rebuild_candidate(
     view: View,
     chain: OptionChain,
@@ -267,7 +338,7 @@ def _effective_view(
     ):
         # "Volatility will expand" without a dated catalyst is a vague claim; price it neutral
         # (and pick neutral structures) instead of paying up for long premium.
-        return replace(view, volatility="neutral")
+        return replace(view, volatility="neutral", volatility_multiplier=None)
     return view
 
 
@@ -329,7 +400,14 @@ class _ExpirySetup:
             view, event_dates, catalyst_dates, today, expiry
         ):
             vol_view = "neutral"  # the catalyst falls after this expiry
-        view_sigma = context.atm_iv * VOL_VIEW_MULTIPLIER[vol_view]
+        vol_multiplier = VOL_VIEW_MULTIPLIER[vol_view]
+        if (
+            vol_view in {"expand", "contract"}
+            and view.volatility_multiplier is not None
+            and vol_view == view.volatility
+        ):
+            vol_multiplier = view.volatility_multiplier
+        view_sigma = context.atm_iv * vol_multiplier
         hv20 = chain.underlying.hv20
         if hv20 and not has_event:
             # Implied vol usually exceeds realised vol (variance risk premium);
@@ -780,6 +858,7 @@ __all__ = [
     "Candidate",
     "STRUCTURE_NAMES",
     "build_candidates",
+    "build_vrp_candidate",
     "rebuild_candidate",
     "select_expiries",
     "strike_window",

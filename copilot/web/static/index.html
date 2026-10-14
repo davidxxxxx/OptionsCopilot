@@ -66,6 +66,25 @@
         <div id="ideas-dropped" class="dropped hidden"></div>
         <div id="idea-detail" class="detail hidden"></div>
       </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>规则推荐：卖指数时间价值</h2>
+          <span class="muted">独立于 Top 10；仅在 IV−HV、事件静默期和风险预算均满足时列出</span>
+        </div>
+        <div id="vrp-conditions" class="tags"></div>
+        <div class="table-wrap">
+          <table id="vrp-ideas-table">
+            <thead><tr>
+              <th>#</th><th>状态</th><th>标的</th><th>观点</th><th>结构</th><th>到期</th><th>组合</th>
+              <th class="num">净权利金</th><th class="num">最大亏损</th><th class="num">最大盈利</th>
+              <th class="num">盈亏比</th><th>盈亏平衡</th><th class="num">胜率 观点/市场</th>
+              <th class="num">期望优势</th><th class="num">建议张数</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="vrp-ideas-empty" class="muted">当前没有满足条件的 VRP 组合。</p>
+      </div>
     </section>
 
     <section id="tab-views" class="tab">
@@ -140,7 +159,9 @@
             <thead><tr>
               <th>标的</th><th class="num">现价</th><th class="num">IV30</th><th class="num">IV90</th>
               <th class="num">期限斜率</th><th class="num">25Δ偏斜</th><th class="num">25Δ蝶式</th>
-              <th class="num">IV−HV20</th><th class="num">GEX</th><th class="num">认沽/认购持仓比</th>
+              <th class="num">IV−HV20</th><th class="num">GEX</th><th class="num">GEX 符号</th>
+              <th class="num">Call Wall</th><th class="num">Put Wall</th><th class="num">Max Pain</th><th>OPEX</th>
+              <th class="num">认沽/认购持仓比</th>
               <th class="num">自有 IV 分位</th><th>更新时间</th>
             </tr></thead>
             <tbody></tbody>
@@ -314,7 +335,14 @@
       </div>
       <div class="card">
         <div class="card-head">
-          <h2>新闻观点校准</h2>
+          <h2>期权资金流检验</h2>
+          <span class="muted">仅做历史测量，不参与观点、候选或排序</span>
+        </div>
+        <div id="flow-study-summary" class="stages"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>新闻观点校准（漂移与波动）</h2>
           <span id="news-calibration-status" class="muted">—</span>
         </div>
         <div id="news-calibration-summary" class="stages"></div>

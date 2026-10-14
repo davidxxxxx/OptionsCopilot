@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from typing import Any
 
-from copilot.config import RulesSettings
+from copilot.config import RulesSettings, VrpSettings
 from copilot.market.models import OptionQuote, valid_price
 from copilot.strategies.portfolio import profit_exit
 
@@ -100,11 +100,26 @@ def exit_decision(
     *,
     today: date,
     rules: RulesSettings,
+    vrp: VrpSettings | None = None,
 ) -> tuple[str, str] | None:
     idea = entry["idea"]
     multiplier = int(idea.get("multiplier") or 100)
     net_debit = float(idea["net_debit"])
     kind = "credit" if net_debit < 0 else "debit"
+    if idea.get("origin") == "vrp" and vrp is not None:
+        pnl_mid = float(mark.get("pnl_mid", mark["pnl"]))
+        max_profit = float(idea.get("max_profit") or 0.0)
+        credit = -net_debit * multiplier
+        if max_profit > 0 and pnl_mid >= max_profit * vrp.take_profit_pct:
+            return "take_profit", f"VRP 已获得最大利润的 {vrp.take_profit_pct:.0%}"
+        if credit > 0 and pnl_mid <= -credit * vrp.stop_credit_multiple:
+            return "stop_loss", f"VRP 中间价亏损达到初始权利金的 {vrp.stop_credit_multiple:g} 倍"
+        dte = int(mark["dte"])
+        if int(idea["dte"]) > vrp.time_exit_dte and dte <= vrp.time_exit_dte:
+            return "time_exit", f"VRP 距到期 {dte} 天，按规则平仓"
+        if dte <= 0:
+            return "expiry", "到期日按最后报价结算"
+        return None
     decision = profit_exit(
         kind,
         net_debit * multiplier,

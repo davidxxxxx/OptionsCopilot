@@ -23,7 +23,11 @@ from copilot.analysis.brief import needs_refresh, write_brief
 from copilot.analysis.ladder import LadderSignal, ladder_signal, ladder_view
 from copilot.analysis.ledger import score_news, update_ledger
 from copilot.analysis.tagging import JsonModel, NewsTagger
-from copilot.analysis.news_calibration import calibrated_view, current_calibration
+from copilot.analysis.news_calibration import (
+    calibrated_view,
+    current_calibration,
+    current_vol_calibration,
+)
 from copilot.config import Settings
 from copilot.market.calendar import is_regular_session, is_trading_day
 from copilot.market.cboe import CboeChain
@@ -41,6 +45,7 @@ from copilot.strategies.builder import (
     Candidate,
     back_expiries,
     build_candidates,
+    build_vrp_candidate,
     rebuild_candidate,
     select_expiries,
     strike_window,
@@ -56,6 +61,7 @@ from copilot.strategies.portfolio import (
 )
 from copilot.strategies.ranking import candidate_key, dropped_ideas, idea_key, loss_cap, rank_candidates
 from copilot.strategies.tracking import entry_record, exit_decision, mark_idea, settle_unmarked
+from copilot.strategies.vrp import blackout_event, candidate_block_reason, entry_block_reason
 
 log = logging.getLogger(__name__)
 NEW_YORK = ZoneInfo("America/New_York")
@@ -122,9 +128,16 @@ def run_pipeline(
         calibration = current_calibration(
             store.get_kv("news_calibration"), settings.news_calibration
         )
+        vol_calibration = current_vol_calibration(
+            store.get_kv("news_vol_calibration"), settings.news_calibration
+        )
         stages["calibration"] = {
             key: calibration[key]
             for key in ("k", "sd", "samples", "days", "verified")
+        }
+        stages["vol_calibration"] = {
+            key: vol_calibration[key]
+            for key in ("k_vol_expand", "k_vol_contract", "samples", "days")
         }
         # 1. News and calendar ------------------------------------------------
         started = time.monotonic()
@@ -210,7 +223,7 @@ def run_pipeline(
         views = ledger.views
         store.save_views(run_id, (ledger.book.get(s) or view.to_dict() for s, view in views.items()))
         pricing_views = {
-            symbol: calibrated_view(view, float(calibration["k"]))
+            symbol: calibrated_view(view, float(calibration["k"]), vol_calibration)
             for symbol, view in views.items()
         }
         macro_views: dict[tuple[str, str], View] = {}
@@ -255,6 +268,8 @@ def run_pipeline(
         started = time.monotonic()
         ideas: list[dict[str, Any]] = []
         event_ideas: list[dict[str, Any]] = []
+        vrp_ideas: list[dict[str, Any]] = []
+        vrp_conditions: dict[str, dict[str, Any]] = {}
         macro_candidates: list[Candidate] = []
         macro_failures: dict[str, str] = {}
         chains = _ChainCache(deps.option_source) if deps.option_source is not None else None
@@ -410,6 +425,86 @@ def run_pipeline(
                     portfolio=risk,
                 )
                 _attach_macro_events(event_ideas, major, today)
+            if settings.vrp.enabled and chains is not None:
+                vrp_candidates: list[Candidate] = []
+                blackout = blackout_event(major, today, settings.vrp.event_blackout_days)
+                for symbol in settings.vrp.symbols:
+                    condition: dict[str, Any] = {
+                        "symbol": symbol,
+                        "blackout": blackout,
+                        "risk_budget": (
+                            round(account.net_liquidation * settings.strategy.risk_per_trade_pct, 2)
+                            if account and account.net_liquidation else None
+                        ),
+                    }
+                    vrp_conditions[symbol] = condition
+                    if blackout is not None:
+                        condition.update({"status": "blocked", "reason": "重大宏观事件静默期"})
+                        continue
+                    try:
+                        raw_chain = chains.chain(symbol)
+                        enriched = history.enrich(raw_chain.underlying, keep_iv30=True)
+                        condition["iv_30d"] = enriched.iv30
+                        condition["hv20"] = enriched.hv20
+                        iv_minus_hv = (
+                            enriched.iv30 - enriched.hv20 if enriched.iv30 is not None else None
+                        )
+                        condition["iv_minus_hv20"] = iv_minus_hv
+                        reason = entry_block_reason(
+                            iv30=enriched.iv30, hv20=enriched.hv20,
+                            blackout=blackout, settings=settings.vrp,
+                        )
+                        if reason is not None:
+                            condition.update({"status": "blocked", "reason": reason})
+                            continue
+                        candidate = build_vrp_candidate(
+                            OptionChain(underlying=enriched, quotes=raw_chain.quotes),
+                            settings.strategy,
+                            today=today,
+                            dte_min=settings.vrp.dte_min,
+                            dte_max=settings.vrp.dte_max,
+                            short_delta=settings.vrp.short_delta,
+                            risk_budget=condition["risk_budget"],
+                        )
+                        reason = candidate_block_reason(
+                            candidate, risk.remaining if risk is not None else None,
+                        )
+                        if reason is not None:
+                            condition.update({"status": "blocked", "reason": reason})
+                            continue
+                        assert candidate is not None
+                        vrp_candidates.append(candidate)
+                        condition.update({
+                            "status": "met",
+                            "expiry": candidate.expiry.isoformat(),
+                            "max_loss": round(candidate.profile.max_loss, 2),
+                            "edge": round(candidate.edge, 2),
+                        })
+                    except Exception as exc:
+                        condition.update({"status": "blocked", "reason": f"{type(exc).__name__}: {exc}"[:160]})
+                if vrp_candidates and settings.vrp.max_ideas > 0:
+                    vrp_views = {
+                        ("vrp", candidate.symbol): View(
+                            symbol=candidate.symbol, direction="neutral", conviction=1,
+                            expected_move_pct=0.0, horizon_days=38, volatility="neutral",
+                            source="vrp", structures=("bull_put_spread",),
+                            dte_min=settings.vrp.dte_min, dte_max=settings.vrp.dte_max,
+                        )
+                        for candidate in vrp_candidates
+                    }
+                    vrp_ideas = rank_candidates(
+                        vrp_candidates,
+                        views={},
+                        settings=replace(
+                            settings.strategy,
+                            max_ideas=settings.vrp.max_ideas,
+                            max_ideas_per_symbol=1,
+                        ),
+                        account=account,
+                        previous=(),
+                        rule_views=vrp_views,
+                        portfolio=risk,
+                    )
             states: dict[str, dict[str, Any]] = {}
             try:
                 if not is_trading_day(today):
@@ -440,7 +535,7 @@ def run_pipeline(
                 stages["tracking"] = _track(
                     store,
                     run_id=run_id,
-                    ideas=[*ideas, *event_ideas],
+                    ideas=[*ideas, *event_ideas, *vrp_ideas],
                     chains=chains,
                     today=today,
                     now=now,
@@ -472,6 +567,7 @@ def run_pipeline(
                 "ideas": len(ideas),
                 "event_candidates": len(macro_candidates),
                 "event_ideas": len(event_ideas),
+                "vrp_ideas": len(vrp_ideas),
                 "event_skipped": macro_failures,
                 "loss_cap": round(cap, 2) if cap is not None else None,
                 "over_cap": over_cap,
@@ -485,12 +581,19 @@ def run_pipeline(
                 "warnings": market.warnings[:30] if market is not None else [],
             }
         store.save_snapshot(run_id, "event_ideas", "list", event_ideas)
+        store.save_snapshot(run_id, "vrp_ideas", "list", vrp_ideas)
+        store.save_snapshot(run_id, "vrp_ideas", "conditions", vrp_conditions)
         if event_study is not None:
             store.save_snapshot(run_id, "event_study", "latest", event_study)
         stages["event_study"] = {
             "status": "ok" if event_study is not None else "none",
             "views": len(macro_views),
             "ideas": len(event_ideas),
+        }
+        stages["vrp"] = {
+            "status": "ok" if settings.vrp.enabled else "disabled",
+            "ideas": len(vrp_ideas),
+            "conditions": vrp_conditions,
         }
         for symbol, underlying in underlyings.items():
             store.save_snapshot(run_id, "underlying", symbol, _underlying_dict(underlying))
@@ -856,7 +959,9 @@ def _track(
             continue
         store.add_tracked_mark(row["id"], run_id, mark["marked_at"], mark)
         marked += 1
-        decision = exit_decision(entry, mark, today=today, rules=settings.rules)
+        decision = exit_decision(
+            entry, mark, today=today, rules=settings.rules, vrp=settings.vrp,
+        )
         if decision is not None:
             code, text = decision
             exit_payload = _tracking_exit_payload(

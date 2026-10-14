@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import math
+import random
+import statistics
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Sequence
@@ -21,6 +23,8 @@ class CalibrationSample:
     x: float
     y: float
     volatility_source: str = "iv30"
+    volatility: str = "neutral"
+    absolute_move: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -81,6 +85,8 @@ def build_samples(
             x=predicted / daily_sigma,
             y=sign * math.log(next_close / close) / daily_sigma,
             volatility_source=volatility_source,
+            volatility=str(view.get("volatility") or "neutral"),
+            absolute_move=abs(math.log(next_close / close)) / daily_sigma,
         ))
     return SampleBuild(tuple(samples), eligible, skipped_close, skipped_iv)
 
@@ -176,12 +182,165 @@ def current_calibration(
     return payload
 
 
-def calibrated_view(view: View, factor: float) -> View:
+def estimate_vol_calibration(
+    samples: Sequence[CalibrationSample],
+    settings: NewsCalibrationSettings | None = None,
+    *,
+    computed_at: datetime | None = None,
+    bootstrap_draws: int = 1_000,
+) -> dict[str, Any]:
+    """Estimate expand/contract multipliers with a fixed-seed day bootstrap.
+
+    Days, rather than individual symbols, are resampled so same-day observations remain
+    clustered. The raw implied calibration weight is shrunk toward N(0.5, 0.5²).
+    """
+
+    config = settings or NewsCalibrationSettings()
+    usable = [
+        sample for sample in samples
+        if sample.volatility in {"expand", "contract", "neutral"}
+        and math.isfinite(sample.absolute_move)
+        and sample.absolute_move >= 0
+    ]
+    expand = _vol_side(
+        usable, "expand", 1.15, bootstrap_draws, config.min_vol_days
+    )
+    contract = _vol_side(
+        usable, "contract", 0.85, bootstrap_draws, config.min_vol_days
+    )
+    moment = computed_at or datetime.now(timezone.utc)
+    return {
+        "k_vol_expand": expand["k"],
+        "k_vol_contract": contract["k"],
+        "expand": expand,
+        "contract": contract,
+        "samples": len(usable),
+        "days": len({sample.day for sample in usable}),
+        "computed_at": moment.astimezone(timezone.utc).isoformat(timespec="seconds"),
+        "method": "fixed-seed day bootstrap",
+        "min_vol_days": config.min_vol_days,
+    }
+
+
+def current_vol_calibration(
+    stored: Mapping[str, Any] | None,
+    settings: NewsCalibrationSettings | None = None,
+) -> dict[str, Any]:
+    if stored:
+        return dict(stored)
+    payload = estimate_vol_calibration((), settings)
+    payload["computed_at"] = None
+    return payload
+
+
+def calibrated_view(
+    view: View,
+    factor: float,
+    vol_calibration: Mapping[str, Any] | None = None,
+) -> View:
     """Return a pricing-only copy; non-ledger views and stored views stay unchanged."""
 
-    if view.source != "ledger" or view.drift_sigma is None:
+    if view.source != "ledger":
         return view
-    return replace(view, drift_sigma=view.drift_sigma * factor)
+    changes: dict[str, Any] = {}
+    if view.drift_sigma is not None:
+        changes["drift_sigma"] = view.drift_sigma * factor
+    if view.volatility in {"expand", "contract"}:
+        base = {"expand": 1.15, "contract": 0.85}[view.volatility]
+        key = f"k_vol_{view.volatility}"
+        weight = float((vol_calibration or {}).get(key, 0.5))
+        changes["volatility_multiplier"] = 1 + min(max(weight, 0.0), 1.0) * (base - 1)
+    return replace(view, **changes) if changes else view
+
+
+def _vol_side(
+    samples: Sequence[CalibrationSample],
+    side: str,
+    base_multiplier: float,
+    bootstrap_draws: int,
+    min_days: int,
+) -> dict[str, Any]:
+    side_samples = [sample for sample in samples if sample.volatility == side]
+    neutral = [sample for sample in samples if sample.volatility == "neutral"]
+    relevant = [*side_samples, *neutral]
+    days = sorted({sample.day for sample in relevant})
+    ratio = _move_ratio(side_samples, neutral)
+    raw = (
+        (ratio - 1) / (base_multiplier - 1)
+        if ratio is not None
+        else None
+    )
+    if ratio is None or len(days) < min_days:
+        return _vol_prior(side_samples, neutral, ratio, raw)
+    grouped = {day: [sample for sample in relevant if sample.day == day] for day in days}
+    rng = random.Random(20261014)
+    ratios: list[float] = []
+    for _ in range(max(bootstrap_draws, 1)):
+        draw = [rng.choice(days) for _day in days]
+        resampled = [sample for day in draw for sample in grouped[day]]
+        value = _move_ratio(
+            [sample for sample in resampled if sample.volatility == side],
+            [sample for sample in resampled if sample.volatility == "neutral"],
+        )
+        if value is not None:
+            ratios.append(value)
+    ratio_se = statistics.pstdev(ratios) if len(ratios) > 1 else None
+    if ratio_se is None:
+        return _vol_prior(side_samples, neutral, ratio, raw)
+    k_se = max(ratio_se / abs(base_multiplier - 1), 0.25)
+    prior_precision = 1 / (0.5 * 0.5)
+    sample_precision = 1 / (k_se * k_se)
+    assert raw is not None
+    posterior = (0.5 * prior_precision + raw * sample_precision) / (
+        prior_precision + sample_precision
+    )
+    posterior_sd = 1 / math.sqrt(prior_precision + sample_precision)
+    return {
+        "k": min(max(posterior, 0.0), 1.0),
+        "k_raw": raw,
+        "k_posterior_raw": posterior,
+        "ratio": ratio,
+        "ratio_se": ratio_se,
+        "k_se": k_se,
+        "sd": posterior_sd,
+        "samples": len(side_samples),
+        "neutral_samples": len(neutral),
+        "days": len(days),
+    }
+
+
+def _vol_prior(
+    side_samples: Sequence[CalibrationSample],
+    neutral: Sequence[CalibrationSample],
+    ratio: float | None,
+    raw: float | None = None,
+) -> dict[str, Any]:
+    return {
+        "k": 0.5,
+        "k_raw": 0.5 if raw is None else raw,
+        "k_posterior_raw": 0.5,
+        "ratio": ratio,
+        "ratio_se": None,
+        "k_se": None,
+        "sd": 0.5,
+        "samples": len(side_samples),
+        "neutral_samples": len(neutral),
+        "days": len({sample.day for sample in (*side_samples, *neutral)}),
+    }
+
+
+def _move_ratio(
+    side_samples: Sequence[CalibrationSample],
+    neutral: Sequence[CalibrationSample],
+) -> float | None:
+    if not side_samples or not neutral:
+        return None
+    neutral_mean = sum(sample.absolute_move for sample in neutral) / len(neutral)
+    if neutral_mean <= 0:
+        return None
+    return (
+        sum(sample.absolute_move for sample in side_samples) / len(side_samples)
+    ) / neutral_mean
 
 
 def _estimate(
@@ -276,5 +435,7 @@ __all__ = [
     "calibrated_view",
     "compute_calibration",
     "current_calibration",
+    "current_vol_calibration",
     "estimate_calibration",
+    "estimate_vol_calibration",
 ]

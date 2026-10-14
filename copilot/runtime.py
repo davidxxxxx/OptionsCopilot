@@ -16,8 +16,9 @@ from copilot.analysis.event_study import (
     reaction_observations,
     walk_forward_evaluation,
 )
+from copilot.analysis.flow_study import compute_flow_stats
 from copilot.analysis.deepseek import DeepSeekClient
-from copilot.analysis.news_calibration import compute_calibration
+from copilot.analysis.news_calibration import compute_calibration, estimate_vol_calibration
 from copilot.config import Settings, load_settings
 from copilot.intraday_archive import IntradayArchive
 from copilot.market.cboe import CboeClient
@@ -84,10 +85,7 @@ class Runtime:
             )
 
     def refresh_event_study(self) -> bool:
-        if (
-            not self.settings.events.enabled
-            and not self.settings.news_calibration.enabled
-        ) or self._study_lock.locked():
+        if self._study_lock.locked():
             return False
         self._study_thread = threading.Thread(
             target=self._refresh_event_study_now,
@@ -113,17 +111,51 @@ class Runtime:
                     log.exception("event-study refresh failed")
             if self.settings.news_calibration.enabled:
                 try:
-                    calibration, _built = compute_calibration(
+                    calibration, built = compute_calibration(
                         self.store,
                         self.settings.news_calibration,
                         today=today,
                         index_history=self.deps.index_history,
                     )
                     self.store.set_kv("news_calibration", calibration)
+                    self.store.set_kv(
+                        "news_vol_calibration",
+                        estimate_vol_calibration(
+                            built.samples, self.settings.news_calibration
+                        ),
+                    )
                 except Exception:
                     log.exception("news-calibration refresh failed")
+            try:
+                self._refresh_flow_stats(today)
+            except Exception:
+                log.exception("flow-study refresh failed")
         finally:
             self._study_lock.release()
+
+    def _refresh_flow_stats(self, today: date) -> None:
+        symbols = {"SPY", "QQQ", "IWM"}
+        symbols.update(row["symbol"] for row in self.store.latest_market_states())
+        states = {
+            symbol: self.store.market_state_history(symbol, 400)
+            for symbol in sorted(symbols)
+        }
+        daily: dict[str, list[list[Any]]] = {}
+        intraday: dict[tuple[str, date], list[list[Any]]] = {}
+        for symbol, history in states.items():
+            cached = self.store.latest_daily_cache(symbol, "NASDAQ_OHLC") or []
+            daily[symbol] = [list(row) for row in cached]
+            for state in history:
+                day = date.fromisoformat(str(state["as_of"])[:10])
+                bars = self.store.intraday_day("nasdaq", symbol, day)
+                if not bars:
+                    bars = self.store.intraday_day("ibkr", symbol, day)
+                if bars:
+                    intraday[(symbol, day)] = bars
+        self.store.set_kv("flow_stats", {
+            "as_of": today.isoformat(),
+            **compute_flow_stats(states, intraday, daily),
+        })
 
     def _refresh_event_stats(self, today: date) -> None:
         source = self.deps.news_sources.tradingview if self.deps.news_sources else None
@@ -284,6 +316,8 @@ def build_runtime(
         settings.events.enabled and event_study_refresh_needed(store)
     ) or (
         settings.news_calibration.enabled and store.get_kv("news_calibration") is None
+    ) or (
+        store.get_kv("flow_stats") is None
     ):
         runtime.refresh_event_study()
     return runtime

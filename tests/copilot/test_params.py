@@ -9,7 +9,7 @@ from copilot.params import SCORING_REVISION, params_payload, params_version
 
 
 def test_params_version_is_stable_and_tracks_only_scoring_settings(settings) -> None:
-    assert SCORING_REVISION == 5
+    assert SCORING_REVISION == 7
     version = params_version(settings)
     assert params_payload(settings)["calendar"] == {
         "catalyst_symbols": list(settings.calendar.catalyst_symbols),
@@ -31,6 +31,20 @@ def test_params_version_is_stable_and_tracks_only_scoring_settings(settings) -> 
         "rho": 0.3,
         "min_days_verified": 20,
         "max_sd_verified": 0.2,
+        "min_vol_days": 10,
+    }
+    assert params_payload(settings)["vrp"] == {
+        "enabled": True,
+        "symbols": ("SPY", "QQQ"),
+        "dte_min": 30,
+        "dte_max": 45,
+        "short_delta": 0.2,
+        "min_iv_minus_hv20": 0.02,
+        "event_blackout_days": 3,
+        "max_ideas": 2,
+        "take_profit_pct": 0.5,
+        "stop_credit_multiple": 2.0,
+        "time_exit_dte": 21,
     }
     assert params_version(settings) == version
     assert params_version(replace(
@@ -99,6 +113,10 @@ def test_params_version_is_stable_and_tracks_only_scoring_settings(settings) -> 
     assert params_version(replace(
         settings,
         news_calibration=replace(settings.news_calibration, k0=0.6),
+    )) != version
+    assert params_version(replace(
+        settings,
+        vrp=replace(settings.vrp, min_iv_minus_hv20=0.03),
     )) != version
 
 

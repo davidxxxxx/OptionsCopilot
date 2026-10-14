@@ -12,6 +12,7 @@ const ENDPOINTS = Object.freeze({
   eventStudyLatest: "/api/event-study/latest",
   eventReactions: "/api/event-reactions",
   newsCalibration: "/api/news-calibration",
+  flowStats: "/api/flow-stats",
   views: "/api/views",
   tracking: "/api/tracking",
   marketState: "/api/market-state",
@@ -32,7 +33,7 @@ const SOURCE_NAMES = Object.freeze({
 });
 const HOUR_NAMES = Object.freeze({ bmo: "盘前", amc: "盘后", dmh: "盘中" });
 
-const appState = { latestRunId: null, wasRunning: false, run: null, loaded: false, meta: null, tracking: null, status: null, calibration: null };
+const appState = { latestRunId: null, wasRunning: false, run: null, loaded: false, meta: null, tracking: null, status: null, calibration: null, flowStats: null };
 
 function el(tag, options = {}, children = []) {
   const node = document.createElement(tag);
@@ -151,6 +152,11 @@ async function refreshRun() {
   } catch (error) {
     appState.calibration = null;
   }
+  try {
+    appState.flowStats = await getJson(ENDPOINTS.flowStats);
+  } catch (error) {
+    appState.flowStats = null;
+  }
   renderRun();
   renderIdeas();
   await refreshEventStudy();
@@ -158,12 +164,13 @@ async function refreshRun() {
   renderPositions();
   await refreshTracking();
   renderNewsCalibration();
+  renderFlowStats();
   await refreshMajorEvents();
 }
 
 function calibrationText(calibration) {
   if (!calibration) return "新闻观点校准：—";
-  return `新闻观点校准：k=${Number(calibration.k).toFixed(2)}，sd=${Number(calibration.sd).toFixed(2)}，${calibration.days || 0} 天，命中率 ${percent(calibration.hit_rate, 1)}`;
+  return `新闻观点校准：漂移 k=${Number(calibration.k).toFixed(2)}，扩波 k=${Number(calibration.k_vol_expand).toFixed(2)}，缩波 k=${Number(calibration.k_vol_contract).toFixed(2)}，${calibration.days || 0} 天`;
 }
 
 function renderNewsCalibration() {
@@ -181,6 +188,9 @@ function renderNewsCalibration() {
   summary.appendChild(stageBox("校准系数", Number(calibration.k).toFixed(2), `原始 ${Number(calibration.k_raw).toFixed(2)}`, calibration.verified ? "pos" : "warn"));
   summary.appendChild(stageBox("后验不确定性", Number(calibration.sd).toFixed(2), `样本 ${calibration.samples || 0}；交易日 ${calibration.days || 0}`, ""));
   summary.appendChild(stageBox("方向命中率", percent(calibration.hit_rate, 1), `平均 x ${calibration.mean_x === null ? "—" : Number(calibration.mean_x).toFixed(2)}；平均 y ${calibration.mean_y === null ? "—" : Number(calibration.mean_y).toFixed(2)}`, ""));
+  summary.appendChild(stageBox("扩波校准", Number(calibration.k_vol_expand).toFixed(2), `样本 ${calibration.vol_expand.samples || 0}；中性 ${calibration.vol_expand.neutral_samples || 0}；比率 ${calibration.vol_expand.ratio === null ? "—" : Number(calibration.vol_expand.ratio).toFixed(2)}`, ""));
+  summary.appendChild(stageBox("缩波校准", Number(calibration.k_vol_contract).toFixed(2), `样本 ${calibration.vol_contract.samples || 0}；中性 ${calibration.vol_contract.neutral_samples || 0}；比率 ${calibration.vol_contract.ratio === null ? "—" : Number(calibration.vol_contract.ratio).toFixed(2)}`, ""));
+  summary.appendChild(stageBox("波动校准样本", calibration.vol_samples || 0, `交易日 ${calibration.vol_days || 0}；按交易日固定种子 bootstrap`, ""));
   const sources = calibration.volatility_sources || {};
   summary.appendChild(stageBox("波动率来源", `${sources.iv30 || 0} / ${sources.market_state || 0} / ${sources.hv20 || 0}`, "IV30 / 市场状态 / HV20", ""));
   for (let conviction = 2; conviction <= 5; conviction += 1) {
@@ -285,6 +295,7 @@ function renderIdeas() {
   const detail = document.getElementById("idea-detail");
   detail.classList.add("hidden");
   const run = appState.run;
+  renderVrpIdeas(run);
   const ideas = run ? run.ideas || [] : [];
   renderDropped(run && run.stages && run.stages.options ? run.stages.options.dropped || [] : []);
   if (!ideas.length) {
@@ -319,6 +330,31 @@ function renderIdeas() {
     ]);
     row.addEventListener("click", () => selectIdea(idea, row));
     body.appendChild(row);
+  }
+}
+
+function renderVrpIdeas(run) {
+  const body = document.querySelector("#vrp-ideas-table tbody");
+  const conditions = document.getElementById("vrp-conditions");
+  if (!body || !conditions) return;
+  clear(body);
+  clear(conditions);
+  const snapshots = run ? run.snapshots || {} : {};
+  const payload = snapshots.vrp_ideas || {};
+  const ideas = payload.list || [];
+  for (const idea of ideas) appendCompactIdeaRow(body, idea);
+  document.getElementById("vrp-ideas-empty").classList.toggle("hidden", ideas.length > 0);
+  for (const condition of Object.values(payload.conditions || {})) {
+    const ivGap = condition.iv_minus_hv20 === null || condition.iv_minus_hv20 === undefined
+      ? "IV−HV —"
+      : `IV−HV ${percent(condition.iv_minus_hv20, 1)}`;
+    const budget = condition.risk_budget === null || condition.risk_budget === undefined
+      ? "净值未知，使用最窄宽度"
+      : `预算 ${money(condition.risk_budget)}`;
+    conditions.appendChild(el("span", {
+      className: `tag ${condition.status === "met" ? "pos" : "warn"}`,
+      text: `${condition.symbol}：${condition.status === "met" ? "满足" : condition.reason || "未满足"}；${ivGap}；${budget}`,
+    }));
   }
 }
 
@@ -660,10 +696,34 @@ async function refreshMarketState() {
       el("td", { className: "num", text: percent(state.butterfly_25d, 1) }),
       el("td", { className: "num", text: percent(state.iv_minus_hv20, 1) }),
       el("td", { className: "num", text: compactNumber(state.gex) }),
+      el("td", { className: "num", text: state.gex_sign > 0 ? "+" : state.gex_sign < 0 ? "−" : "0" }),
+      el("td", { className: "num", text: flowLevel(state.call_wall) }),
+      el("td", { className: "num", text: flowLevel(state.put_wall) }),
+      el("td", { className: "num", text: flowLevel(state.max_pain) }),
+      el("td", { text: state.opex_week ? "OPEX 周" : "—" }),
       el("td", { className: "num", text: state.oi_put_call === null ? "—" : Number(state.oi_put_call).toFixed(2) }),
       el("td", { className: "num", text: `${percent(state.own_iv_percentile, 0)}（${state.history_days || 0} 天）` }),
       el("td", { text: localTime(state.updated_at || state.as_of) }),
     ]));
+  }
+}
+
+function flowLevel(feature) {
+  if (!feature || feature.strike === undefined) return "—";
+  const distance = feature.distance_pct === null || feature.distance_pct === undefined
+    ? ""
+    : ` (${signed(Number(feature.distance_pct) * 100, 1)}%)`;
+  return `${Number(feature.strike).toFixed(2)}${distance}`;
+}
+
+function renderFlowStats() {
+  const root = document.getElementById("flow-study-summary");
+  if (!root) return;
+  clear(root);
+  const stats = appState.flowStats || {};
+  for (const [key, label] of [["gex", "GEX 与动量"], ["pinning", "到期钉住"], ["walls", "墙位约束"]]) {
+    const row = stats[key] || {};
+    root.appendChild(stageBox(label, row.verdict || "样本不足", `样本 ${row.n || 0} 天`, row.verdict === "样本不足" ? "warn" : ""));
   }
 }
 
@@ -715,7 +775,7 @@ async function refreshTracking() {
       el("td", { text: row.symbol }),
       el("td", { text: row.structure_name }),
       el("td", { className: "legs", text: (row.legs || []).map(legText).join(" / ") }),
-      el("td", { text: row.origin === "ladder" ? "ⓡ 阶梯" : "新闻" }),
+      el("td", { text: row.origin === "ladder" ? "ⓡ 阶梯" : row.origin === "vrp" ? "VRP" : row.origin === "macro" ? "事件" : "新闻" }),
       el("td", { className: "num", text: `${(row.net_premium || 0) >= 0 ? "付" : "收"} ${money(Math.abs(row.net_premium || 0))}` }),
       el("td", { className: "num neg", text: money(row.max_loss) }),
       el("td", { className: "num", text: percent(row.predicted_return_on_risk, 1) }),

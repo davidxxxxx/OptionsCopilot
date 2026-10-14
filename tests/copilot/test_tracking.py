@@ -99,6 +99,33 @@ def test_exit_rules_and_unmarked_settlement(settings) -> None:
     assert exit_decision(near, {"pnl": 0.0, "dte": 0}, today=TODAY, rules=rules)[0] == "expiry"
 
 
+def test_vrp_exit_rules_use_mid_pnl_and_time_exit(settings) -> None:
+    vrp_entry = entry(net_debit=-2.0, max_profit=200.0, dte=39)
+    vrp_entry["idea"]["origin"] = "vrp"
+
+    assert exit_decision(
+        vrp_entry,
+        {"pnl": 80.0, "pnl_mid": 100.0, "dte": 30},
+        today=TODAY,
+        rules=settings.rules,
+        vrp=settings.vrp,
+    )[0] == "take_profit"
+    assert exit_decision(
+        vrp_entry,
+        {"pnl": -350.0, "pnl_mid": -400.0, "dte": 30},
+        today=TODAY,
+        rules=settings.rules,
+        vrp=settings.vrp,
+    )[0] == "stop_loss"
+    assert exit_decision(
+        vrp_entry,
+        {"pnl": 0.0, "pnl_mid": 0.0, "dte": 21},
+        today=TODAY,
+        rules=settings.rules,
+        vrp=settings.vrp,
+    )[0] == "time_exit"
+
+
 def test_exit_decision_uses_mid_pnl_but_preserves_fill_pnl(settings) -> None:
     rules = settings.rules
     wide_spread = {"pnl": -111.54, "pnl_mid": -81.12, "dte": 15}

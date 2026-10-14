@@ -24,6 +24,8 @@ class View:
     source: str = "ledger"
     score: float = 0.0  # signed evidence score from tagged news
     vol_score: float = 0.0
+    # Pricing-only override populated from historical news-volatility calibration.
+    volatility_multiplier: float | None = None
     # Expected move in standard deviations; when set the builder uses it instead of
     # expected_move_pct (it scales with each expiry's implied vol).
     drift_sigma: float | None = None
@@ -71,6 +73,7 @@ class View:
             source=payload.get("source", "ledger"),
             score=float(payload.get("score") or 0.0),
             vol_score=float(payload.get("vol_score") or 0.0),
+            volatility_multiplier=payload.get("volatility_multiplier"),
             drift_sigma=payload.get("drift_sigma"),
             structures=tuple(payload.get("structures") or ()),
             dte_min=payload.get("dte_min"),

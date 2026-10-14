@@ -126,6 +126,20 @@ tau = 0.5
 rho = 0.3
 min_days_verified = 20
 max_sd_verified = 0.2
+min_vol_days = 10
+
+[vrp]
+enabled = true
+symbols = ["SPY", "QQQ"]
+dte_min = 30
+dte_max = 45
+short_delta = 0.20
+min_iv_minus_hv20 = 0.02
+event_blackout_days = 3
+max_ideas = 2
+take_profit_pct = 0.5
+stop_credit_multiple = 2.0
+time_exit_dte = 21
 
 [llm]
 enabled = true

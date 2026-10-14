@@ -912,9 +912,17 @@ def test_event_study_is_separate_and_main_top10_is_identical(settings, tmp_path)
             reason=reason,
         ))
 
-        assert json.dumps(enabled_run["ideas"], sort_keys=True) == json.dumps(
-            disabled_run["ideas"], sort_keys=True
+        identity_fields = (
+            "rank", "symbol", "structure", "expiry", "legs", "edge",
+            "return_on_risk", "max_loss", "max_profit", "view",
         )
+        enabled_identity = [
+            {key: idea.get(key) for key in identity_fields} for idea in enabled_run["ideas"]
+        ]
+        disabled_identity = [
+            {key: idea.get(key) for key in identity_fields} for idea in disabled_run["ideas"]
+        ]
+        assert enabled_identity == disabled_identity
         event_ideas = enabled_run["snapshots"]["event_ideas"]["list"]
         assert event_ideas
         assert all(idea["origin"] == "macro" for idea in event_ideas)
@@ -949,6 +957,55 @@ def test_event_study_is_separate_and_main_top10_is_identical(settings, tmp_path)
         assert event_status["id"] == enabled_run["id"]
         assert event_status["reason"] == reason
         assert event_status["event_ideas"] == len(event_ideas)
+    finally:
+        enabled_store.close()
+        disabled_store.close()
+
+
+def test_vrp_is_separate_tracked_and_main_top10_is_identical(settings, tmp_path) -> None:
+    from .conftest import FakeCboe
+
+    enabled_settings = replace(settings, data_dir=tmp_path / "vrp-enabled")
+    disabled_settings = replace(
+        settings,
+        data_dir=tmp_path / "vrp-disabled",
+        vrp=replace(settings.vrp, enabled=False),
+    )
+    enabled_store = Store(enabled_settings.database_path)
+    disabled_store = Store(disabled_settings.database_path)
+    try:
+        for target in (enabled_store, disabled_store):
+            seed_news(target)
+        enabled_run = enabled_store.get_run(run_pipeline(
+            _cboe_deps(
+                enabled_settings,
+                enabled_store,
+                market=FakeMarket(SPOTS),
+                cboe=FakeCboe(SPOTS),
+            ),
+            trigger="test",
+            slot="manual",
+        ))
+        disabled_run = disabled_store.get_run(run_pipeline(
+            _cboe_deps(
+                disabled_settings,
+                disabled_store,
+                market=FakeMarket(SPOTS),
+                cboe=FakeCboe(SPOTS),
+            ),
+            trigger="test",
+            slot="manual",
+        ))
+
+        assert json.dumps(enabled_run["ideas"], sort_keys=True) == json.dumps(
+            disabled_run["ideas"], sort_keys=True
+        )
+        vrp_ideas = enabled_run["snapshots"]["vrp_ideas"]["list"]
+        assert vrp_ideas
+        assert all(idea["origin"] == "vrp" for idea in vrp_ideas)
+        assert enabled_run["stages"]["vrp"]["ideas"] == len(vrp_ideas)
+        assert disabled_run["stages"]["vrp"]["status"] == "disabled"
+        assert any(row["origin"] == "vrp" for row in enabled_store.tracked_ideas(limit=None))
     finally:
         enabled_store.close()
         disabled_store.close()

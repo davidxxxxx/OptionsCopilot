@@ -146,6 +146,56 @@ def test_volatility_expansion_needs_a_dated_catalyst() -> None:
         "long_straddle", "long_strangle"}
 
 
+def test_calibrated_expand_without_catalyst_prices_exactly_like_neutral() -> None:
+    chain = make_chain(spot=600, iv=0.20)
+    neutral = View(
+        symbol="SPY", direction="neutral", conviction=3, expected_move_pct=0.0,
+        horizon_days=14, volatility="neutral",
+    )
+    vague_expand = replace(
+        neutral, volatility="expand", volatility_multiplier=1.075,
+    )
+
+    neutral_candidates = build_candidates(neutral, chain, SETTINGS, today=TODAY)
+    vague_candidates = build_candidates(vague_expand, chain, SETTINGS, today=TODAY)
+
+    def signature(candidate):
+        return (
+            candidate.structure,
+            tuple((leg.strike, leg.right, leg.quantity) for leg in candidate.legs),
+            candidate.view_sigma,
+            candidate.edge,
+        )
+
+    assert [signature(candidate) for candidate in vague_candidates] == [
+        signature(candidate) for candidate in neutral_candidates
+    ]
+    assert all(candidate.view_sigma == pytest.approx(0.20) for candidate in vague_candidates)
+
+
+def test_calibrated_expand_with_catalyst_uses_its_multiplier() -> None:
+    chain = make_chain(spot=600, iv=0.20)
+    expanding = View(
+        symbol="SPY", direction="neutral", conviction=3, expected_move_pct=0.0,
+        horizon_days=14, volatility="expand", catalyst_date=TODAY + timedelta(days=5),
+        volatility_multiplier=1.075,
+    )
+    candidates = build_candidates(expanding, chain, SETTINGS, today=TODAY)
+    assert candidates
+    assert all(candidate.view_sigma == pytest.approx(0.215) for candidate in candidates)
+
+
+def test_calibrated_contract_uses_its_multiplier() -> None:
+    chain = make_chain(spot=600, iv=0.20)
+    contracting = View(
+        symbol="SPY", direction="neutral", conviction=3, expected_move_pct=0.0,
+        horizon_days=14, volatility="contract", volatility_multiplier=0.925,
+    )
+    candidates = build_candidates(contracting, chain, SETTINGS, today=TODAY)
+    assert candidates
+    assert all(candidate.view_sigma == pytest.approx(0.185) for candidate in candidates)
+
+
 def test_small_account_only_sees_ideas_within_the_loss_cap() -> None:
     strong = view("bullish", conviction=5, move=0.05)
     candidates = build_candidates(strong, make_chain(spot=600, iv=0.18), SETTINGS, today=TODAY)

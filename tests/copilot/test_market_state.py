@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 
 from copilot.market.state import market_state, with_own_rank
+from copilot.market.models import OptionQuote
 
 from .conftest import TODAY, make_quotes
 
@@ -57,3 +58,57 @@ def test_missing_iv_returns_none_and_own_rank_needs_twenty_days() -> None:
     assert ranked["own_iv_rank"] == pytest.approx(1.0)
     assert ranked["own_iv_percentile"] == pytest.approx(1.0)
     assert ranked["history_days"] == 20
+
+
+def test_flow_levels_have_known_walls_max_oi_and_max_pain() -> None:
+    expiry = date(2026, 11, 20)
+    rows = [
+        (90.0, "C", 10, 0.01), (90.0, "P", 40, 0.02),
+        (100.0, "C", 100, 0.03), (100.0, "P", 100, 0.03),
+        (110.0, "C", 50, 0.04), (110.0, "P", 10, 0.01),
+    ]
+    quotes = [
+        OptionQuote(
+            symbol="SPY", expiry=expiry, strike=strike, right=right,
+            iv=0.20, delta=0.25 if right == "C" else -0.25,
+            gamma=gamma, open_interest=oi,
+        )
+        for strike, right, oi, gamma in rows
+    ]
+    state = market_state(quotes, spot=100.0, today=date(2026, 10, 14))
+    assert state is not None
+    assert state["call_wall"]["strike"] == 100.0
+    assert state["put_wall"]["strike"] == 100.0
+    assert state["max_oi_strike"]["strike"] == 100.0
+    assert state["max_pain"]["strike"] == 100.0
+    assert state["monthly_expiry"] == expiry.isoformat()
+
+
+def test_monthly_expiry_accepts_thursday_when_third_friday_is_absent() -> None:
+    today = date(2026, 4, 1)
+    weekly = date(2026, 4, 10)
+    holiday_thursday = date(2026, 4, 16)
+    quotes = make_quotes("SPY", 600.0, 0.20, [weekly, holiday_thursday])
+    state = market_state(quotes, spot=600.0, today=today)
+    assert state is not None
+    assert state["expiry"] == weekly.isoformat()
+    assert state["monthly_expiry"] == holiday_thursday.isoformat()
+    assert state["days_to_monthly_opex"] == 15
+
+
+def test_gex_sign_uses_one_percent_gross_dead_band() -> None:
+    expiry = TODAY + timedelta(days=30)
+    quotes = [
+        OptionQuote(
+            symbol="SPY", expiry=expiry, strike=600.0, right="C",
+            iv=0.20, delta=0.25, gamma=0.01, open_interest=100,
+        ),
+        OptionQuote(
+            symbol="SPY", expiry=expiry, strike=600.0, right="P",
+            iv=0.20, delta=-0.25, gamma=0.01, open_interest=99,
+        ),
+    ]
+    state = market_state(quotes, spot=600.0, today=TODAY)
+    assert state is not None
+    assert state["gex"] > 0
+    assert state["gex_sign"] == 0

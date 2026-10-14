@@ -110,6 +110,22 @@ class NewsCalibrationSettings:
     rho: float = 0.3
     min_days_verified: int = 20
     max_sd_verified: float = 0.2
+    min_vol_days: int = 10
+
+
+@dataclass(frozen=True)
+class VrpSettings:
+    enabled: bool = True
+    symbols: tuple[str, ...] = ("SPY", "QQQ")
+    dte_min: int = 30
+    dte_max: int = 45
+    short_delta: float = 0.20
+    min_iv_minus_hv20: float = 0.02
+    event_blackout_days: int = 3
+    max_ideas: int = 2
+    take_profit_pct: float = 0.5
+    stop_credit_multiple: float = 2.0
+    time_exit_dte: int = 21
 
 
 @dataclass(frozen=True)
@@ -231,6 +247,7 @@ class Settings:
     events: EventSettings
     intraday: IntradaySettings
     news_calibration: NewsCalibrationSettings
+    vrp: VrpSettings
     llm: LlmSettings
     views: ViewsSettings
     strategy: StrategySettings
@@ -292,6 +309,7 @@ def _build(raw: dict[str, Any]) -> Settings:
         events=_event_settings(raw.get("events", {})),
         intraday=_intraday_settings(raw.get("intraday", {})),
         news_calibration=NewsCalibrationSettings(**raw.get("news_calibration", {})),
+        vrp=_vrp_settings(raw.get("vrp", {})),
         llm=LlmSettings(**raw.get("llm", {})),
         views=_views_settings(raw.get("views", {})),
         strategy=StrategySettings(**raw.get("strategy", {})),
@@ -365,8 +383,21 @@ def _validate(settings: Settings) -> None:
         or not 0 <= calibration.rho <= 1
         or calibration.min_days_verified < 0
         or calibration.max_sd_verified < 0
+        or calibration.min_vol_days < 2
     ):
         raise ValueError("news calibration settings are invalid")
+    vrp = settings.vrp
+    if (
+        not 0 < vrp.dte_min <= vrp.dte_max
+        or not 0.15 <= vrp.short_delta <= 0.25
+        or vrp.min_iv_minus_hv20 < 0
+        or vrp.event_blackout_days < 0
+        or vrp.max_ideas < 0
+        or not 0 < vrp.take_profit_pct <= 1
+        or vrp.stop_credit_multiple <= 0
+        or vrp.time_exit_dte < 0
+    ):
+        raise ValueError("vrp settings are invalid")
     if not 0 <= strategy.tail_weight < 1:
         raise ValueError("strategy.tail_weight must be in [0, 1)")
     for moment in settings.schedule.run_times_et:
@@ -383,6 +414,13 @@ def _rules_settings(raw: dict[str, Any]) -> RulesSettings:
         if key in values:
             values[key] = tuple(float(v) for v in values[key])
     return RulesSettings(**values)
+
+
+def _vrp_settings(raw: dict[str, Any]) -> VrpSettings:
+    values = dict(raw)
+    if "symbols" in values:
+        values["symbols"] = _symbols(values["symbols"])
+    return VrpSettings(**values)
 
 
 def _calendar_settings(raw: dict[str, Any]) -> CalendarSettings:
@@ -451,6 +489,7 @@ __all__ = [
     "IbkrSettings",
     "IntradaySettings",
     "LlmSettings",
+    "NewsCalibrationSettings",
     "NewsSettings",
     "OptionsSettings",
     "RulesSettings",
@@ -458,6 +497,7 @@ __all__ = [
     "Settings",
     "StrategySettings",
     "ViewsSettings",
+    "VrpSettings",
     "WebSettings",
     "load_settings",
 ]

@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from copilot.analysis.ledger import ACTION_NAMES
-from copilot.analysis.news_calibration import current_calibration
+from copilot.analysis.news_calibration import current_calibration, current_vol_calibration
 from copilot.analysis.tagging import CATEGORIES
 from copilot.market.state import with_own_rank
 from copilot.news.macro_calendar import CATEGORY_NAMES, MAJOR_CATEGORIES, MacroEvent, group_major
@@ -169,11 +169,28 @@ def create_app(runtime: Runtime) -> FastAPI:
         payload = current_calibration(
             store.get_kv("news_calibration"), settings.news_calibration
         )
+        vol_payload = current_vol_calibration(
+            store.get_kv("news_vol_calibration"), settings.news_calibration
+        )
         return {
             **payload,
+            "k_vol_expand": vol_payload["k_vol_expand"],
+            "k_vol_contract": vol_payload["k_vol_contract"],
+            "vol_samples": vol_payload["samples"],
+            "vol_days": vol_payload["days"],
+            "vol_expand": vol_payload["expand"],
+            "vol_contract": vol_payload["contract"],
             "enabled": settings.news_calibration.enabled,
             "min_days_verified": settings.news_calibration.min_days_verified,
             "max_sd_verified": settings.news_calibration.max_sd_verified,
+        }
+
+    @app.get("/api/flow-stats")
+    def flow_stats() -> dict[str, Any]:
+        return store.get_kv("flow_stats") or {
+            "gex": {"n": 0, "verdict": "样本不足"},
+            "pinning": {"n": 0, "verdict": "样本不足"},
+            "walls": {"n": 0, "verdict": "样本不足"},
         }
 
     @app.get("/api/event-reactions")

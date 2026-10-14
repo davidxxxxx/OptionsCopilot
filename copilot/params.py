@@ -8,7 +8,7 @@ from typing import Any
 
 from copilot.config import Settings
 
-SCORING_REVISION = 5
+SCORING_REVISION = 7
 
 
 def params_payload(settings: Settings) -> dict[str, Any]:
@@ -35,6 +35,7 @@ def params_payload(settings: Settings) -> dict[str, Any]:
             "min_wf_hit_rate": settings.events.min_wf_hit_rate,
         },
         "news_calibration": asdict(settings.news_calibration),
+        "vrp": asdict(settings.vrp),
     }
 
 

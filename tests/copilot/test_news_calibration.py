@@ -13,7 +13,9 @@ from copilot.analysis.news_calibration import (
     build_samples,
     calibrated_view,
     current_calibration,
+    current_vol_calibration,
     estimate_calibration,
+    estimate_vol_calibration,
 )
 from copilot.pipeline import PipelineDeps, run_pipeline
 from copilot.runtime import Runtime
@@ -176,14 +178,117 @@ def test_store_selects_last_finished_run_before_1600_et(store) -> None:
 
 
 def test_calibrated_view_changes_only_news_pricing_copy() -> None:
-    news = View.from_dict(ledger_view())
+    news = View.from_dict(ledger_view(volatility="expand"))
     ladder = replace(news, source="ladder")
     macro = replace(news, source="macro")
-    priced = calibrated_view(news, 0.25)
+    priced = calibrated_view(news, 0.25, {"k_vol_expand": 0.4})
     assert priced.drift_sigma == pytest.approx(0.1)
+    assert priced.volatility_multiplier == pytest.approx(1.06)
     assert news.drift_sigma == 0.4
-    assert calibrated_view(ladder, 0.25) is ladder
-    assert calibrated_view(macro, 0.25) is macro
+    assert news.volatility_multiplier is None
+    assert calibrated_view(ladder, 0.25, {"k_vol_expand": 0.4}) is ladder
+    assert calibrated_view(macro, 0.25, {"k_vol_expand": 0.4}) is macro
+
+
+def test_vol_estimator_recovers_known_expand_ratio() -> None:
+    start = date(2026, 1, 2)
+    rows = []
+    for index in range(40):
+        day = start + timedelta(days=index)
+        rows.append(CalibrationSample(day, f"N{index}", 3, 1.0, 0.0,
+                                      volatility="neutral", absolute_move=1.0))
+        rows.append(CalibrationSample(day, f"E{index}", 3, 1.0, 0.0,
+                                      volatility="expand", absolute_move=1.075))
+    result = estimate_vol_calibration(rows)
+    assert result["expand"]["ratio"] == pytest.approx(1.075)
+    assert result["k_vol_expand"] == pytest.approx(0.5)
+    assert result["method"] == "fixed-seed day bootstrap"
+
+
+def test_vol_estimator_clamps_raw_weights() -> None:
+    start = date(2026, 1, 2)
+    rows = []
+    for index in range(20):
+        day = start + timedelta(days=index)
+        rows.extend([
+            CalibrationSample(day, f"N{index}", 3, 1.0, 0.0,
+                              volatility="neutral", absolute_move=1.0),
+            CalibrationSample(day, f"EH{index}", 3, 1.0, 0.0,
+                              volatility="expand", absolute_move=1.4),
+            CalibrationSample(day, f"CL{index}", 3, 1.0, 0.0,
+                              volatility="contract", absolute_move=1.2),
+        ])
+    result = estimate_vol_calibration(rows)
+    assert result["expand"]["k_raw"] > 1.0
+    assert result["k_vol_expand"] == 1.0
+    assert result["contract"]["k_raw"] < 0.0
+    assert result["k_vol_contract"] == 0.0
+
+
+def test_vol_estimator_two_days_keeps_prior_with_diagnostics(settings) -> None:
+    start = date(2026, 1, 2)
+    rows = []
+    for index in range(2):
+        day = start + timedelta(days=index)
+        rows.extend([
+            CalibrationSample(day, f"N{index}", 3, 1.0, 0.0,
+                              volatility="neutral", absolute_move=1.0),
+            CalibrationSample(day, f"E{index}", 3, 1.0, 0.0,
+                              volatility="expand", absolute_move=1.15),
+        ])
+    result = estimate_vol_calibration(rows, settings.news_calibration)
+    expand = result["expand"]
+    assert result["k_vol_expand"] == 0.5
+    assert expand["ratio"] == pytest.approx(1.15)
+    assert expand["k_raw"] == pytest.approx(1.0)
+    assert expand["samples"] == 2 and expand["neutral_samples"] == 2
+    assert expand["days"] == 2 and expand["sd"] == 0.5
+
+
+def test_vol_estimator_zero_bootstrap_se_is_floored(settings) -> None:
+    start = date(2026, 1, 2)
+    rows = []
+    for index in range(settings.news_calibration.min_vol_days):
+        day = start + timedelta(days=index)
+        rows.extend([
+            CalibrationSample(day, f"N{index}", 3, 1.0, 0.0,
+                              volatility="neutral", absolute_move=1.0),
+            CalibrationSample(day, f"E{index}", 3, 1.0, 0.0,
+                              volatility="expand", absolute_move=1.15),
+        ])
+    result = estimate_vol_calibration(rows, settings.news_calibration)
+    expand = result["expand"]
+    assert expand["ratio_se"] == 0.0
+    assert expand["k_se"] == 0.25
+    assert 0.5 < result["k_vol_expand"] < expand["k_raw"]
+    assert expand["sd"] > 0.0
+
+
+def test_vol_estimator_negative_raw_evidence_reduces_posterior(settings) -> None:
+    start = date(2026, 1, 2)
+    rows = []
+    for index in range(settings.news_calibration.min_vol_days):
+        day = start + timedelta(days=index)
+        rows.extend([
+            CalibrationSample(day, f"N{index}", 3, 1.0, 0.0,
+                              volatility="neutral", absolute_move=1.0),
+            CalibrationSample(day, f"E{index}", 3, 1.0, 0.0,
+                              volatility="expand", absolute_move=0.985),
+        ])
+    result = estimate_vol_calibration(rows, settings.news_calibration)
+    expand = result["expand"]
+    assert expand["k_raw"] == pytest.approx(-0.1)
+    assert 0.0 < result["k_vol_expand"] < 0.5
+    assert expand["k_posterior_raw"] == pytest.approx(result["k_vol_expand"])
+
+
+def test_vol_estimator_uses_prior_without_data() -> None:
+    result = current_vol_calibration(None)
+    assert result["k_vol_expand"] == 0.5
+    assert result["k_vol_contract"] == 0.5
+    assert result["expand"]["sd"] == 0.5
+    assert result["contract"]["sd"] == 0.5
+    assert result["samples"] == 0 and result["days"] == 0
 
 
 def test_pipeline_scales_news_copy_records_stage_and_keeps_stored_view(settings, store) -> None:
@@ -191,6 +296,12 @@ def test_pipeline_scales_news_copy_records_stage_and_keeps_stored_view(settings,
         "k": 0.5, "k_raw": 0.5, "sd": 0.3, "samples": 12, "days": 8,
         "hit_rate": 0.4, "mean_x": 0.2, "mean_y": -0.1, "by_conviction": {},
         "prior": {}, "computed_at": NOW.isoformat(),
+    })
+    store.set_kv("news_vol_calibration", {
+        "k_vol_expand": 0.4, "k_vol_contract": 0.6, "samples": 20, "days": 10,
+        "expand": {"samples": 7, "neutral_samples": 8, "ratio": 1.06},
+        "contract": {"samples": 5, "neutral_samples": 8, "ratio": 0.91},
+        "computed_at": NOW.isoformat(), "method": "fixed-seed day bootstrap",
     })
     seed_news(store)
     run = store.get_run(run_pipeline(
@@ -230,11 +341,19 @@ def test_news_calibration_api_and_static_ui(settings, store) -> None:
         "by_conviction": {"2": {"samples": 2, "days": 2, "k": 0.3, "sd": 0.4, "hit_rate": 0.5}},
         "prior": {}, "computed_at": NOW.isoformat(),
     })
+    store.set_kv("news_vol_calibration", {
+        "k_vol_expand": 0.4, "k_vol_contract": 0.6, "samples": 20, "days": 10,
+        "expand": {"samples": 7, "neutral_samples": 8, "ratio": 1.06},
+        "contract": {"samples": 5, "neutral_samples": 8, "ratio": 0.91},
+        "computed_at": NOW.isoformat(), "method": "fixed-seed day bootstrap",
+    })
     deps = PipelineDeps(settings, store, None, None, None)
     runtime = Runtime(settings, Secrets({}), store, deps, RunManager(lambda trigger, slot: 0), None)
     payload = TestClient(create_app(runtime)).get("/api/news-calibration").json()
     assert payload["k"] == 0.4 and payload["verified"] is False
     assert payload["volatility_sources"]["hv20"] == 3
+    assert payload["k_vol_expand"] == 0.4 and payload["k_vol_contract"] == 0.6
+    assert payload["vol_samples"] == 20 and payload["vol_days"] == 10
     assert payload["min_days_verified"] == settings.news_calibration.min_days_verified
     root = Path(__file__).parents[2]
     script = (root / "copilot/web/static/app.js").read_text(encoding="utf-8")
@@ -242,6 +361,7 @@ def test_news_calibration_api_and_static_ui(settings, store) -> None:
     assert "新闻观点未经验证：校准系数" in script
     assert "波动率来源" in script
     assert "新闻观点校准" in html
+    assert "扩波校准" in script and "缩波校准" in script
 
 
 def test_current_calibration_disabled_is_verified(settings) -> None:
