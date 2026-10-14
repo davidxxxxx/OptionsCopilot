@@ -103,6 +103,16 @@ class IntradaySettings:
 
 
 @dataclass(frozen=True)
+class NewsCalibrationSettings:
+    enabled: bool = True
+    k0: float = 0.5
+    tau: float = 0.5
+    rho: float = 0.3
+    min_days_verified: int = 20
+    max_sd_verified: float = 0.2
+
+
+@dataclass(frozen=True)
 class OptionsSettings:
     # "cboe": free CBOE delayed chains (about 15 min delayed in session, closing quotes
     # otherwise), falling back to IBKR per symbol; "ibkr": IB Gateway quotes only.
@@ -220,6 +230,7 @@ class Settings:
     calendar: CalendarSettings
     events: EventSettings
     intraday: IntradaySettings
+    news_calibration: NewsCalibrationSettings
     llm: LlmSettings
     views: ViewsSettings
     strategy: StrategySettings
@@ -280,6 +291,7 @@ def _build(raw: dict[str, Any]) -> Settings:
         calendar=_calendar_settings(raw.get("calendar", {})),
         events=_event_settings(raw.get("events", {})),
         intraday=_intraday_settings(raw.get("intraday", {})),
+        news_calibration=NewsCalibrationSettings(**raw.get("news_calibration", {})),
         llm=LlmSettings(**raw.get("llm", {})),
         views=_views_settings(raw.get("views", {})),
         strategy=StrategySettings(**raw.get("strategy", {})),
@@ -346,6 +358,15 @@ def _validate(settings: Settings) -> None:
         or intraday.ibkr_client_id_offset < 1
     ):
         raise ValueError("intraday settings are invalid")
+    calibration = settings.news_calibration
+    if (
+        not 0 <= calibration.k0 <= 1
+        or calibration.tau <= 0
+        or not 0 <= calibration.rho <= 1
+        or calibration.min_days_verified < 0
+        or calibration.max_sd_verified < 0
+    ):
+        raise ValueError("news calibration settings are invalid")
     if not 0 <= strategy.tail_weight < 1:
         raise ValueError("strategy.tail_weight must be in [0, 1)")
     for moment in settings.schedule.run_times_et:

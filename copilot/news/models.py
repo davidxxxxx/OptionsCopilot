@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
+from zoneinfo import ZoneInfo
+
+NEW_YORK = ZoneInfo("America/New_York")
 
 
 @dataclass(frozen=True)
@@ -39,6 +42,21 @@ class EarningsEvent:
     source: str = ""
 
 
+def release_time(event: EarningsEvent) -> datetime:
+    """Conservative New York release cutoff for an earnings calendar row."""
+
+    cutoff = {
+        "bmo": time(9, 30),
+        "amc": time(16, 0),
+        "dmh": time(12, 0),
+    }.get((event.hour or "").lower(), time(16, 0))
+    return datetime.combine(event.report_date, cutoff, NEW_YORK)
+
+
+def is_upcoming(event: EarningsEvent, now: datetime) -> bool:
+    return now.astimezone(NEW_YORK) < release_time(event)
+
+
 @dataclass(frozen=True)
 class SourceResult:
     source: str
@@ -51,4 +69,11 @@ def stable_id(*parts: str) -> str:
     return hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()[:24]
 
 
-__all__ = ["EarningsEvent", "NewsItem", "SourceResult", "stable_id"]
+__all__ = [
+    "EarningsEvent",
+    "NewsItem",
+    "SourceResult",
+    "is_upcoming",
+    "release_time",
+    "stable_id",
+]

@@ -624,6 +624,47 @@ class Store:
                 )
         return len(rows)
 
+    def news_calibration_candidates(self) -> list[dict[str, Any]]:
+        """Return views from each trading day's last finished pre-close run."""
+
+        selected: dict[str, tuple[datetime, int]] = {}
+        for row in self._rows(
+            "SELECT id, trading_date, started_at FROM runs"
+            " WHERE status IN ('ok','partial') AND finished_at IS NOT NULL"
+            " ORDER BY started_at, id"
+        ):
+            started = datetime.fromisoformat(row["started_at"])
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            local = started.astimezone(NEW_YORK)
+            if local.time() >= datetime.strptime("16:00", "%H:%M").time():
+                continue
+            selected[row["trading_date"]] = (started, int(row["id"]))
+
+        result: list[dict[str, Any]] = []
+        for trading_date, (_started, run_id) in sorted(selected.items()):
+            underlyings = {
+                row["key"]: json.loads(row["payload"])
+                for row in self._rows(
+                    "SELECT key, payload FROM snapshots WHERE run_id=? AND kind='underlying'",
+                    (run_id,),
+                )
+            }
+            for row in self._rows(
+                "SELECT symbol, payload FROM views WHERE run_id=? ORDER BY symbol", (run_id,)
+            ):
+                symbol = row["symbol"]
+                state = self.market_state_on(symbol, date.fromisoformat(trading_date))
+                result.append({
+                    "run_id": run_id,
+                    "trading_date": trading_date,
+                    "symbol": symbol,
+                    "view": json.loads(row["payload"]),
+                    "underlying": underlyings.get(symbol),
+                    "market_state": state,
+                })
+        return result
+
     def macro_events_between(
         self,
         start: datetime,
@@ -951,6 +992,14 @@ class Store:
         rows = self._rows(
             "SELECT payload FROM daily_cache WHERE symbol=? AND kind=? AND as_of=?",
             (symbol, kind, as_of.isoformat()),
+        )
+        return json.loads(rows[0]["payload"]) if rows else None
+
+    def latest_daily_cache(self, symbol: str, kind: str) -> Any | None:
+        rows = self._rows(
+            "SELECT payload FROM daily_cache WHERE symbol=? AND kind=?"
+            " ORDER BY as_of DESC LIMIT 1",
+            (symbol, kind),
         )
         return json.loads(rows[0]["payload"]) if rows else None
 

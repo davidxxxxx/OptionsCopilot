@@ -17,6 +17,7 @@ from copilot.analysis.event_study import (
     walk_forward_evaluation,
 )
 from copilot.analysis.deepseek import DeepSeekClient
+from copilot.analysis.news_calibration import compute_calibration
 from copilot.config import Settings, load_settings
 from copilot.intraday_archive import IntradayArchive
 from copilot.market.cboe import CboeClient
@@ -83,7 +84,10 @@ class Runtime:
             )
 
     def refresh_event_study(self) -> bool:
-        if not self.settings.events.enabled or self._study_lock.locked():
+        if (
+            not self.settings.events.enabled
+            and not self.settings.news_calibration.enabled
+        ) or self._study_lock.locked():
             return False
         self._study_thread = threading.Thread(
             target=self._refresh_event_study_now,
@@ -102,77 +106,93 @@ class Runtime:
             return
         try:
             today = datetime.now(NEW_YORK).date()
-            source = self.deps.news_sources.tradingview if self.deps.news_sources else None
-            if source is not None:
-                watermark = self.store.get_kv("event_study_macro_watermark")
-                cursor = (
-                    max(
-                        EVENT_HISTORY_START,
-                        min(
-                            date.fromisoformat(str(watermark)) + timedelta(days=1),
-                            today - timedelta(days=14),
-                        ),
+            if self.settings.events.enabled:
+                try:
+                    self._refresh_event_stats(today)
+                except Exception:
+                    log.exception("event-study refresh failed")
+            if self.settings.news_calibration.enabled:
+                try:
+                    calibration, _built = compute_calibration(
+                        self.store,
+                        self.settings.news_calibration,
+                        today=today,
+                        index_history=self.deps.index_history,
                     )
-                    if watermark
-                    else EVENT_HISTORY_START
-                )
-                while cursor <= today:
-                    window_end = min(cursor + timedelta(days=89), today)
-                    rows = source.fetch(cursor, window_end)
-                    start_at = datetime.combine(cursor, time.min, NEW_YORK).astimezone(timezone.utc)
-                    end_at = datetime.combine(
-                        window_end + timedelta(days=1), time.min, NEW_YORK
-                    ).astimezone(timezone.utc)
-                    self.store.replace_macro_events("tradingview", start_at, end_at, rows)
-                    self.store.set_kv("event_study_macro_watermark", window_end.isoformat())
-                    cursor = window_end + timedelta(days=1)
-            start_at = datetime.combine(EVENT_HISTORY_START, time.min, NEW_YORK).astimezone(timezone.utc)
-            end_at = datetime.combine(today + timedelta(days=1), time.min, NEW_YORK).astimezone(timezone.utc)
-            events = self.store.macro_events_between(start_at, end_at)
-            cache_day = weekly_cache_date(today)
-            stats = []
-            bars_by_symbol: dict[str, list[tuple[date, float, float, float, float]]] = {}
-            for symbol in self.settings.events.study_symbols:
-                cached = self.store.get_daily_cache(symbol, "NASDAQ_OHLC", cache_day)
-                if cached is None:
-                    bars = daily_bars(symbol, today=today, start=EVENT_HISTORY_START)
-                else:
-                    bars = [
-                        (date.fromisoformat(row[0]), *[float(value) for value in row[1:]])
-                        for row in cached
-                    ]
-                recent = daily_bars(symbol, today=today, start=today - timedelta(days=15))
-                bars = merge_daily_bars(bars, recent)
-                bars_by_symbol[symbol] = bars
-                self.store.put_daily_cache(
-                    symbol,
-                    "NASDAQ_OHLC",
-                    cache_day,
-                    [[day.isoformat(), open_, high, low, close] for day, open_, high, low, close in bars],
-                )
-            sync_event_reactions(self.store, events, bars_by_symbol, self.settings)
-            for symbol, bars in bars_by_symbol.items():
-                for category in STUDY_INDICATORS:
-                    payload = compute_event_stats(
-                        category,
-                        symbol,
-                        events,
-                        bars,
-                        shrink_k=self.settings.events.shrink_k,
-                        min_half_t=self.settings.events.min_half_t,
-                        recency_half_life=self.settings.events.recency_half_life,
-                        min_events=self.settings.events.min_events,
-                        min_t=self.settings.events.min_t,
-                        min_wf_views=self.settings.events.min_wf_views,
-                        min_wf_hit_rate=self.settings.events.min_wf_hit_rate,
-                    )
-                    if payload is not None:
-                        stats.append(payload)
-            self.store.replace_event_stats(stats)
-        except Exception:
-            log.exception("event-study refresh failed")
+                    self.store.set_kv("news_calibration", calibration)
+                except Exception:
+                    log.exception("news-calibration refresh failed")
         finally:
             self._study_lock.release()
+
+    def _refresh_event_stats(self, today: date) -> None:
+        source = self.deps.news_sources.tradingview if self.deps.news_sources else None
+        if source is not None:
+            watermark = self.store.get_kv("event_study_macro_watermark")
+            cursor = (
+                max(
+                    EVENT_HISTORY_START,
+                    min(
+                        date.fromisoformat(str(watermark)) + timedelta(days=1),
+                        today - timedelta(days=14),
+                    ),
+                )
+                if watermark
+                else EVENT_HISTORY_START
+            )
+            while cursor <= today:
+                window_end = min(cursor + timedelta(days=89), today)
+                rows = source.fetch(cursor, window_end)
+                start_at = datetime.combine(cursor, time.min, NEW_YORK).astimezone(timezone.utc)
+                end_at = datetime.combine(
+                    window_end + timedelta(days=1), time.min, NEW_YORK
+                ).astimezone(timezone.utc)
+                self.store.replace_macro_events("tradingview", start_at, end_at, rows)
+                self.store.set_kv("event_study_macro_watermark", window_end.isoformat())
+                cursor = window_end + timedelta(days=1)
+        start_at = datetime.combine(EVENT_HISTORY_START, time.min, NEW_YORK).astimezone(timezone.utc)
+        end_at = datetime.combine(today + timedelta(days=1), time.min, NEW_YORK).astimezone(timezone.utc)
+        events = self.store.macro_events_between(start_at, end_at)
+        cache_day = weekly_cache_date(today)
+        stats = []
+        bars_by_symbol: dict[str, list[tuple[date, float, float, float, float]]] = {}
+        for symbol in self.settings.events.study_symbols:
+            cached = self.store.get_daily_cache(symbol, "NASDAQ_OHLC", cache_day)
+            if cached is None:
+                bars = daily_bars(symbol, today=today, start=EVENT_HISTORY_START)
+            else:
+                bars = [
+                    (date.fromisoformat(row[0]), *[float(value) for value in row[1:]])
+                    for row in cached
+                ]
+            recent = daily_bars(symbol, today=today, start=today - timedelta(days=15))
+            bars = merge_daily_bars(bars, recent)
+            bars_by_symbol[symbol] = bars
+            self.store.put_daily_cache(
+                symbol,
+                "NASDAQ_OHLC",
+                cache_day,
+                [[day.isoformat(), open_, high, low, close] for day, open_, high, low, close in bars],
+            )
+        sync_event_reactions(self.store, events, bars_by_symbol, self.settings)
+        for symbol, bars in bars_by_symbol.items():
+            for category in STUDY_INDICATORS:
+                payload = compute_event_stats(
+                    category,
+                    symbol,
+                    events,
+                    bars,
+                    shrink_k=self.settings.events.shrink_k,
+                    min_half_t=self.settings.events.min_half_t,
+                    recency_half_life=self.settings.events.recency_half_life,
+                    min_events=self.settings.events.min_events,
+                    min_t=self.settings.events.min_t,
+                    min_wf_views=self.settings.events.min_wf_views,
+                    min_wf_hit_rate=self.settings.events.min_wf_hit_rate,
+                )
+                if payload is not None:
+                    stats.append(payload)
+        self.store.replace_event_stats(stats)
 
     def close(self) -> None:
         if self.scheduler is not None:
@@ -260,7 +280,11 @@ def build_runtime(
             refresh_event_study=runtime.refresh_event_study,
             archive_intraday=runtime.tick_intraday,
         )
-    if settings.events.enabled and event_study_refresh_needed(store):
+    if (
+        settings.events.enabled and event_study_refresh_needed(store)
+    ) or (
+        settings.news_calibration.enabled and store.get_kv("news_calibration") is None
+    ):
         runtime.refresh_event_study()
     return runtime
 

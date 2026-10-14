@@ -108,7 +108,7 @@ def exit_decision(
     decision = profit_exit(
         kind,
         net_debit * multiplier,
-        float(mark["pnl"]),
+        float(mark.get("pnl_mid", mark["pnl"])),
         None if idea.get("max_profit") is None else float(idea["max_profit"]),
         rules,
     )

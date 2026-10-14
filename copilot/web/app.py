@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from copilot.analysis.ledger import ACTION_NAMES
+from copilot.analysis.news_calibration import current_calibration
 from copilot.analysis.tagging import CATEGORIES
 from copilot.market.state import with_own_rank
 from copilot.news.macro_calendar import CATEGORY_NAMES, MAJOR_CATEGORIES, MacroEvent, group_major
@@ -162,6 +163,18 @@ def create_app(runtime: Runtime) -> FastAPI:
     @app.get("/api/event-study")
     def event_study(category: str | None = None) -> list[dict[str, Any]]:
         return store.event_stats(category or None)
+
+    @app.get("/api/news-calibration")
+    def news_calibration() -> dict[str, Any]:
+        payload = current_calibration(
+            store.get_kv("news_calibration"), settings.news_calibration
+        )
+        return {
+            **payload,
+            "enabled": settings.news_calibration.enabled,
+            "min_days_verified": settings.news_calibration.min_days_verified,
+            "max_sd_verified": settings.news_calibration.max_sd_verified,
+        }
 
     @app.get("/api/event-reactions")
     def event_reactions(

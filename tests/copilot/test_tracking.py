@@ -97,6 +97,16 @@ def test_exit_rules_and_unmarked_settlement(settings) -> None:
     near = entry(dte=7)
     assert exit_decision(near, {"pnl": 0.0, "dte": 1}, today=TODAY, rules=rules) is None
     assert exit_decision(near, {"pnl": 0.0, "dte": 0}, today=TODAY, rules=rules)[0] == "expiry"
+
+
+def test_exit_decision_uses_mid_pnl_but_preserves_fill_pnl(settings) -> None:
+    rules = settings.rules
+    wide_spread = {"pnl": -111.54, "pnl_mid": -81.12, "dte": 15}
+    assert exit_decision(entry(), wide_spread, today=TODAY, rules=rules) is None
+
+    stopped = {"pnl": -111.54, "pnl_mid": -101.4, "dte": 15}
+    assert exit_decision(entry(), stopped, today=TODAY, rules=rules)[0] == "stop_loss"
+    assert stopped["pnl"] == -111.54
     past = TODAY + timedelta(days=22)
     settled = settle_unmarked(entry(), {"pnl": 12.0, "pnl_mid": 14.0, "spot": 108.0,
                                               "value": 2.2, "return_on_risk": 0.05}, today=past)

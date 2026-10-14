@@ -20,7 +20,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from copilot.config import ViewsSettings
-from copilot.news.models import EarningsEvent, NewsItem
+from copilot.news.models import EarningsEvent, NewsItem, is_upcoming, release_time
 from .models import View
 from .tagging import NewsTag
 
@@ -130,8 +130,8 @@ def update_ledger(
 
     today = now.astimezone(NEW_YORK).date()
     next_earnings: dict[str, EarningsEvent] = {}
-    for event in sorted(earnings, key=lambda e: e.report_date):
-        if event.report_date >= today:
+    for event in sorted(earnings, key=release_time):
+        if is_upcoming(event, now):
             next_earnings.setdefault(event.symbol, event)
     candidates = list(dict.fromkeys([*previous, *evidence]))
     book: dict[str, dict[str, Any]] = {}

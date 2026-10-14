@@ -9,7 +9,7 @@ from copilot.params import SCORING_REVISION, params_payload, params_version
 
 
 def test_params_version_is_stable_and_tracks_only_scoring_settings(settings) -> None:
-    assert SCORING_REVISION == 3
+    assert SCORING_REVISION == 5
     version = params_version(settings)
     assert params_payload(settings)["calendar"] == {
         "catalyst_symbols": list(settings.calendar.catalyst_symbols),
@@ -23,6 +23,14 @@ def test_params_version_is_stable_and_tracks_only_scoring_settings(settings) -> 
         "recency_half_life": settings.events.recency_half_life,
         "min_wf_views": settings.events.min_wf_views,
         "min_wf_hit_rate": settings.events.min_wf_hit_rate,
+    }
+    assert params_payload(settings)["news_calibration"] == {
+        "enabled": True,
+        "k0": 0.5,
+        "tau": 0.5,
+        "rho": 0.3,
+        "min_days_verified": 20,
+        "max_sd_verified": 0.2,
     }
     assert params_version(settings) == version
     assert params_version(replace(
@@ -87,6 +95,10 @@ def test_params_version_is_stable_and_tracks_only_scoring_settings(settings) -> 
             settings.events,
             min_wf_hit_rate=settings.events.min_wf_hit_rate + 0.01,
         ),
+    )) != version
+    assert params_version(replace(
+        settings,
+        news_calibration=replace(settings.news_calibration, k0=0.6),
     )) != version
 
 

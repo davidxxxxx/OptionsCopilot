@@ -11,6 +11,7 @@ const ENDPOINTS = Object.freeze({
   eventStudy: "/api/event-study",
   eventStudyLatest: "/api/event-study/latest",
   eventReactions: "/api/event-reactions",
+  newsCalibration: "/api/news-calibration",
   views: "/api/views",
   tracking: "/api/tracking",
   marketState: "/api/market-state",
@@ -31,7 +32,7 @@ const SOURCE_NAMES = Object.freeze({
 });
 const HOUR_NAMES = Object.freeze({ bmo: "盘前", amc: "盘后", dmh: "盘中" });
 
-const appState = { latestRunId: null, wasRunning: false, run: null, loaded: false, meta: null, tracking: null, status: null };
+const appState = { latestRunId: null, wasRunning: false, run: null, loaded: false, meta: null, tracking: null, status: null, calibration: null };
 
 function el(tag, options = {}, children = []) {
   const node = document.createElement(tag);
@@ -145,13 +146,54 @@ async function refreshRun() {
   } catch (error) {
     appState.run = null;
   }
+  try {
+    appState.calibration = await getJson(ENDPOINTS.newsCalibration);
+  } catch (error) {
+    appState.calibration = null;
+  }
   renderRun();
   renderIdeas();
   await refreshEventStudy();
   renderViews();
   renderPositions();
   await refreshTracking();
+  renderNewsCalibration();
   await refreshMajorEvents();
+}
+
+function calibrationText(calibration) {
+  if (!calibration) return "新闻观点校准：—";
+  return `新闻观点校准：k=${Number(calibration.k).toFixed(2)}，sd=${Number(calibration.sd).toFixed(2)}，${calibration.days || 0} 天，命中率 ${percent(calibration.hit_rate, 1)}`;
+}
+
+function renderNewsCalibration() {
+  const calibration = appState.calibration;
+  setText("news-calibration-line", calibrationText(calibration));
+  setText("news-calibration-status", calibration
+    ? (calibration.verified ? "已达到验证门槛" : `未验证：需至少 ${calibration.min_days_verified} 天且 sd ≤ ${Number(calibration.max_sd_verified).toFixed(2)}`)
+    : "暂无数据");
+  const summary = document.getElementById("news-calibration-summary");
+  const body = document.querySelector("#news-calibration-table tbody");
+  if (!summary || !body) return;
+  clear(summary);
+  clear(body);
+  if (!calibration) return;
+  summary.appendChild(stageBox("校准系数", Number(calibration.k).toFixed(2), `原始 ${Number(calibration.k_raw).toFixed(2)}`, calibration.verified ? "pos" : "warn"));
+  summary.appendChild(stageBox("后验不确定性", Number(calibration.sd).toFixed(2), `样本 ${calibration.samples || 0}；交易日 ${calibration.days || 0}`, ""));
+  summary.appendChild(stageBox("方向命中率", percent(calibration.hit_rate, 1), `平均 x ${calibration.mean_x === null ? "—" : Number(calibration.mean_x).toFixed(2)}；平均 y ${calibration.mean_y === null ? "—" : Number(calibration.mean_y).toFixed(2)}`, ""));
+  const sources = calibration.volatility_sources || {};
+  summary.appendChild(stageBox("波动率来源", `${sources.iv30 || 0} / ${sources.market_state || 0} / ${sources.hv20 || 0}`, "IV30 / 市场状态 / HV20", ""));
+  for (let conviction = 2; conviction <= 5; conviction += 1) {
+    const row = (calibration.by_conviction || {})[String(conviction)] || {};
+    body.appendChild(el("tr", {}, [
+      el("td", { text: `${conviction}★` }),
+      el("td", { className: "num", text: row.samples || 0 }),
+      el("td", { className: "num", text: row.days || 0 }),
+      el("td", { className: "num", text: row.k === undefined ? "—" : Number(row.k).toFixed(2) }),
+      el("td", { className: "num", text: row.sd === undefined ? "—" : Number(row.sd).toFixed(2) }),
+      el("td", { className: "num", text: percent(row.hit_rate, 1) }),
+    ]));
+  }
 }
 
 function stageBox(label, value, note, tone) {
@@ -261,7 +303,7 @@ function renderIdeas() {
     const row = el("tr", {}, [
       el("td", { text: idea.rank }),
       el("td", { className: idea.status === "new" ? "status-new" : "", text: idea.status === "new" ? "新增" : idea.status === "kept" ? "保持" : "—" }),
-      el("td", { text: `${idea.symbol}${idea.indicative ? " *" : ""}${idea.origin === "ladder" ? " ⓡ" : ""}`, title: idea.origin === "ladder" ? "指数回撤阶梯规则" : idea.indicative ? "收盘参考价" : "" }),
+      el("td", { text: `${idea.symbol}${idea.indicative ? " *" : ""}${idea.origin === "ladder" ? " ⓡ" : ""}${idea.news_unverified ? " ⚠" : ""}`, title: idea.news_unverified ? "新闻观点未经验证" : idea.origin === "ladder" ? "指数回撤阶梯规则" : idea.indicative ? "收盘参考价" : "" }),
       el("td", {}, [viewLabel(idea.view)]),
       el("td", { text: idea.structure_name }),
       el("td", { text: `${idea.expiry.slice(5)}（${idea.dte}天）${macroEvents.length ? " ⚠" : ""}`, title: expiryTitle }),
@@ -461,6 +503,7 @@ function selectIdea(idea, row) {
     tags.push(el("span", { className: "tag", text: `IBKR 实时中间价净权利金 ${money(idea.live_net_premium)}（延迟估算 ${money(idea.net_premium)}）` }));
   }
   if (idea.origin === "ladder") tags.push(el("span", { className: "tag", text: "指数回撤阶梯规则" }));
+  if (idea.news_unverified) tags.push(el("span", { className: "tag warn", text: `新闻观点未经验证：校准系数 k=${Number(idea.calibration_k).toFixed(2)}（基于 ${(appState.calibration || {}).days || 0} 天）` }));
   if (idea.already_holding) tags.push(el("span", { className: "tag warn", text: "已持有该标的" }));
   if (idea.portfolio_ok === false) tags.push(el("span", { className: "tag warn", text: `超出组合剩余风险额度（剩余 ${money(idea.portfolio_remaining)}）` }));
   if (idea.same_direction) tags.push(el("span", { className: "tag warn", text: "与现有持仓同向，风险叠加" }));

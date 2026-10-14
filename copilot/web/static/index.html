@@ -50,6 +50,7 @@
           <h2>Top 10 期权组合</h2>
           <span class="muted">按“期望优势 / 最大亏损”排序；期望优势 = 你的观点相对市场定价的优势，已扣滑点和手续费；点击行查看细节</span>
         </div>
+        <p id="news-calibration-line" class="muted">新闻观点校准：—</p>
         <div class="table-wrap">
           <table id="ideas-table">
             <thead><tr>
@@ -307,6 +308,19 @@
         <div class="table-wrap">
           <table id="tracking-groups-table">
             <thead><tr><th>分组</th><th class="num">笔数</th><th class="num">胜率</th><th class="num">累计盈亏</th><th class="num">收益风险比</th><th class="num">预测优势率</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>新闻观点校准</h2>
+          <span id="news-calibration-status" class="muted">—</span>
+        </div>
+        <div id="news-calibration-summary" class="stages"></div>
+        <div class="table-wrap">
+          <table id="news-calibration-table">
+            <thead><tr><th>信心</th><th class="num">样本</th><th class="num">天数</th><th class="num">k</th><th class="num">sd</th><th class="num">命中率</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>

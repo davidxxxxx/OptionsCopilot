@@ -119,6 +119,14 @@ ibkr_requests_per_day = 60
 ibkr_request_spacing_seconds = 10
 ibkr_client_id_offset = 10
 
+[news_calibration]
+enabled = true
+k0 = 0.5
+tau = 0.5
+rho = 0.3
+min_days_verified = 20
+max_sd_verified = 0.2
+
 [llm]
 enabled = true
 model = "deepseek-v4-flash"

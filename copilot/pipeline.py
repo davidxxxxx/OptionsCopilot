@@ -23,6 +23,7 @@ from copilot.analysis.brief import needs_refresh, write_brief
 from copilot.analysis.ladder import LadderSignal, ladder_signal, ladder_view
 from copilot.analysis.ledger import score_news, update_ledger
 from copilot.analysis.tagging import JsonModel, NewsTagger
+from copilot.analysis.news_calibration import calibrated_view, current_calibration
 from copilot.config import Settings
 from copilot.market.calendar import is_regular_session, is_trading_day
 from copilot.market.cboe import CboeChain
@@ -32,6 +33,7 @@ from copilot.market.models import AccountSnapshot, ChainInfo, OptionChain, Optio
 from copilot.market.state import market_state
 from copilot.news.collect import NewsSources, collect_news
 from copilot.news.macro_calendar import group_major
+from copilot.news.models import EarningsEvent, is_upcoming
 from copilot.params import params_payload, params_version
 from copilot.store import Store
 from copilot.strategies.builder import (
@@ -117,6 +119,13 @@ def run_pipeline(
         payload = params_payload(settings)
         stages["params"] = {"version": version}
         store.save_param_set(version, payload)
+        calibration = current_calibration(
+            store.get_kv("news_calibration"), settings.news_calibration
+        )
+        stages["calibration"] = {
+            key: calibration[key]
+            for key in ("k", "sd", "samples", "days", "verified")
+        }
         # 1. News and calendar ------------------------------------------------
         started = time.monotonic()
         upcoming = store.earnings_between(today, today + timedelta(days=settings.news.earnings_days_ahead))
@@ -200,6 +209,10 @@ def run_pipeline(
         store.replace_view_book(ledger.book, ledger.changes, run_id=run_id)
         views = ledger.views
         store.save_views(run_id, (ledger.book.get(s) or view.to_dict() for s, view in views.items()))
+        pricing_views = {
+            symbol: calibrated_view(view, float(calibration["k"]))
+            for symbol, view in views.items()
+        }
         macro_views: dict[tuple[str, str], View] = {}
         event_study: dict[str, Any] | None = None
         if settings.events.enabled:
@@ -245,9 +258,7 @@ def run_pipeline(
         macro_candidates: list[Candidate] = []
         macro_failures: dict[str, str] = {}
         chains = _ChainCache(deps.option_source) if deps.option_source is not None else None
-        event_dates: dict[str, list[date]] = {}
-        for event in earnings:
-            event_dates.setdefault(event.symbol, []).append(event.report_date)
+        event_dates = _upcoming_earnings(earnings, now)
         _mark_groups(groups, chains)
         risk = portfolio_risk(groups, account.net_liquidation if account else None, settings.rules) if account else None
         if market is None and chains is None:
@@ -270,8 +281,11 @@ def run_pipeline(
             consecutive_timeouts = 0
             pause = getattr(market, "pause", None)
             for symbol in symbols:
-                view = views[symbol]
                 events = event_dates.get(symbol, ())
+                view = _pricing_view(pricing_views[symbol], today=today, event_dates=events)
+                if view.source == "ledger" and float(calibration["k"]) <= 0:
+                    failures[symbol] = "新闻观点校准系数为 0，不生成新闻候选"
+                    continue
                 catalysts = _macro_dates(major) if symbol in settings.calendar.catalyst_symbols else ()
                 found: list[Candidate] | None = None
                 reason = ""
@@ -325,9 +339,10 @@ def run_pipeline(
             # Rule views (index ladder) are analysed on their own, labelled by origin.
             for (_origin, symbol), rule_view in rule_views.items() if chains is not None else ():
                 try:
+                    events = event_dates.get(symbol, ())
                     found, _underlying = _analyze_chain(
-                        chains, symbol, rule_view, settings, history, today=today,
-                        event_dates=event_dates.get(symbol, ()),
+                        chains, symbol, _pricing_view(rule_view, today=today, event_dates=events),
+                        settings, history, today=today, event_dates=events,
                         catalyst_dates=(
                             _macro_dates(major) if symbol in settings.calendar.catalyst_symbols else ()
                         ),
@@ -338,7 +353,7 @@ def run_pipeline(
                 except Exception as exc:
                     failures[f"{symbol}（阶梯规则）"] = str(exc)[:160]
             ideas = rank_candidates(
-                candidates, views=views, settings=settings.strategy, account=account, previous=previous,
+                candidates, views=pricing_views, settings=settings.strategy, account=account, previous=previous,
                 rule_views=rule_views, portfolio=risk,
             )
             dropped = dropped_ideas(
@@ -356,18 +371,24 @@ def run_pipeline(
                     log.warning("live re-quote failed: %s", exc)
                     live_check = {"status": "failed", "detail": f"{type(exc).__name__}: {exc}"[:200]}
             _attach_macro_events(ideas, major, today)
+            for idea in ideas:
+                if idea.get("origin") == "news":
+                    idea["calibration_k"] = calibration["k"]
+                    idea["calibration_verified"] = calibration["verified"]
+                    idea["news_unverified"] = not calibration["verified"]
             store.save_ideas(run_id, ideas)
             if chains is not None:
                 for (_origin, symbol), macro_view in macro_views.items():
                     try:
+                        events = event_dates.get(symbol, ())
                         found, _underlying = _analyze_chain(
                             chains,
                             symbol,
-                            macro_view,
+                            _pricing_view(macro_view, today=today, event_dates=events),
                             settings,
                             history,
                             today=today,
-                            event_dates=event_dates.get(symbol, ()),
+                            event_dates=events,
                             catalyst_dates=(
                                 _macro_dates(major)
                                 if symbol in settings.calendar.catalyst_symbols
@@ -669,6 +690,22 @@ def _analysis_symbols(
     if need_price:  # IBKR-only analysis needs the broker's underlying price
         ordered = [symbol for symbol in ordered if (u := underlyings.get(symbol)) and u.price]
     return ordered[: settings.strategy.max_symbols_per_run]
+
+
+def _upcoming_earnings(
+    earnings: Sequence[EarningsEvent], now: datetime
+) -> dict[str, list[date]]:
+    dates: dict[str, list[date]] = {}
+    for event in earnings:
+        if is_upcoming(event, now):
+            dates.setdefault(event.symbol, []).append(event.report_date)
+    return dates
+
+
+def _pricing_view(view: View, *, today: date, event_dates: Sequence[date]) -> View:
+    if view.catalyst_date == today and today not in event_dates:
+        return replace(view, catalyst_date=None)
+    return view
 
 
 class _Skip(Exception):
