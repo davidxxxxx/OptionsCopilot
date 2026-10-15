@@ -3,12 +3,26 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
+from datetime import date
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from copilot.analysis.models import View
 from copilot.config import StrategySettings
 from copilot.market.models import AccountSnapshot
 from .builder import STRUCTURE_NAMES, Candidate
+from .decision_quality import (
+    conservative_expected_return,
+    expected_return_pct,
+    invalidation_text,
+    is_admissible,
+    limit_net_price,
+    price_gap_pct,
+    price_trigger,
+    watch_until,
+)
+
+NEW_YORK = ZoneInfo("America/New_York")
 
 
 def idea_key(idea: Mapping[str, Any]) -> tuple:
@@ -39,7 +53,7 @@ def rank_candidates(
     rule_views: Mapping[tuple[str, str], View] | None = None,
     portfolio: Any = None,
 ) -> list[dict[str, Any]]:
-    """Positive edge only, best edge-per-dollar-at-risk first, capped per symbol.
+    """Admissible ideas, best edge-per-dollar-at-risk first, capped per symbol.
 
     Ideas from the previous list get a ``keep_margin`` head start, so a new idea only
     displaces one of them when it is clearly better (stops the list churning on noise).
@@ -50,7 +64,7 @@ def rank_candidates(
     cap = loss_cap(account, settings)
     eligible = [
         item for item in candidates
-        if item.edge > 0 and item.profile.max_loss > 0
+        if is_admissible(item, settings)
         and (cap is None or item.profile.max_loss <= cap)
     ]
     def selection(item: Candidate) -> tuple[float, float]:
@@ -115,6 +129,8 @@ def dropped_ideas(
             reason = "该标的观点已结束或本次未分析"
         elif candidate is None:
             reason = "本次无法重新定价（腿已不在报价中、流动性不足或该标的未分析）"
+        elif candidate.edge > 0 and not is_admissible(candidate, settings):
+            reason = "按观点预计净收益不足（含模型误差余量）"
         elif candidate.edge <= 0:
             reason = "期望优势已不为正（观点或价格变化）"
         elif cap is not None and candidate.profile.max_loss > cap:
@@ -148,7 +164,10 @@ def to_idea(
     account: AccountSnapshot | None,
     portfolio: Any = None,
 ) -> dict[str, Any]:
+    from copilot.strategies.decision_portfolio import candidate_greeks
+
     profile = candidate.profile
+    greeks = candidate_greeks(candidate)
     budget = (
         account.net_liquidation * settings.risk_per_trade_pct
         if account and account.net_liquidation
@@ -171,6 +190,9 @@ def to_idea(
     same_direction = bool(portfolio is not None and portfolio.same_direction(candidate.symbol, direction))
     quote_times = [leg.quote.quote_time for leg in candidate.legs if leg.quote.quote_time]
     data_types = {leg.quote.market_data_type for leg in candidate.legs if leg.quote.market_data_type}
+    expected = conservative_expected_return(candidate)
+    expected_pct = expected_return_pct(candidate)
+    limit = limit_net_price(candidate, settings.min_expected_return_pct)
     return {
         "rank": rank,
         "symbol": candidate.symbol,
@@ -195,6 +217,9 @@ def to_idea(
                 "fill": round(leg.price, 3),
                 "iv": _round(leg.quote.iv, 4),
                 "delta": _round(leg.quote.delta, 3),
+                "gamma": _round(leg.quote.gamma, 5),
+                "vega": _round(leg.quote.vega, 4),
+                "theta": _round(leg.quote.theta, 4),
                 "open_interest": leg.quote.open_interest,
                 "volume": leg.quote.volume,
             }
@@ -212,10 +237,14 @@ def to_idea(
         "market_ev": round(candidate.market_ev, 2),
         "market_pop": round(candidate.market_pop, 3),
         "edge": round(candidate.edge, 2),
+        "expected_return": round(expected, 2),
+        "expected_return_pct": round(expected_pct, 4),
+        "limit_net_price": round(limit, 4),
         "slippage": round(candidate.slippage, 2),
         "return_on_risk": round(candidate.return_on_risk, 4),
         "spread_cost": round(candidate.spread_cost, 2),
         "atm_iv": round(candidate.atm_iv, 4),
+        "greeks": {key: round(value, 4) for key, value in greeks.items()},
         "view_sigma": round(candidate.view_sigma, 4),
         "drift": round(candidate.drift, 4),
         "suggested_quantity": suggested,
@@ -233,8 +262,89 @@ def to_idea(
     }
 
 
+def watchlist_from_candidates(
+    candidates: Sequence[Candidate],
+    *,
+    views: Mapping[str, View],
+    settings: StrategySettings,
+    now: Any,
+    account: AccountSnapshot | None = None,
+    rule_views: Mapping[tuple[str, str], View] | None = None,
+    portfolio: Any = None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    rule_views = rule_views or {}
+    entries: list[dict[str, Any]] = []
+    seen: set[tuple] = set()
+    for candidate in candidates:
+        if candidate.profile.max_loss <= 0 or is_admissible(candidate, settings):
+            continue
+        limit_price = limit_net_price(candidate, settings.min_expected_return_pct)
+        current = candidate.profile.net_debit
+        gap = price_gap_pct(current, limit_price)
+        if gap > settings.watch_max_price_gap_pct:
+            continue
+        key = candidate_key(candidate)
+        if key in seen:
+            continue
+        view = (
+            views.get(candidate.symbol)
+            if candidate.origin == "news"
+            else rule_views.get((candidate.origin, candidate.symbol))
+        )
+        idea = to_idea(
+            candidate, 0, view=view, settings=settings, account=account, portfolio=portfolio,
+        )
+        entries.append(watch_entry_from_idea(idea, view=view, now=now, gap=gap))
+        seen.add(key)
+    entries.sort(key=lambda item: (item["price_gap_pct"], item["symbol"], item["structure"]))
+    return entries[:limit]
+
+
+def watch_entry_from_idea(
+    idea: Mapping[str, Any],
+    *,
+    view: View | None,
+    now: Any,
+    gap: float | None = None,
+    trigger: str | None = None,
+    reason: str = "price",
+) -> dict[str, Any]:
+    current = float(idea.get("live_net_price", idea["net_debit"]))
+    limit_price = float(idea["limit_net_price"])
+    until = watch_until(now, view)
+    return {
+        "symbol": idea["symbol"],
+        "structure": idea["structure"],
+        "structure_name": idea.get("structure_name", idea["structure"]),
+        "origin": idea.get("origin"),
+        "expiry": idea.get("expiry"),
+        "legs": list(idea.get("legs") or ()),
+        "multiplier": idea.get("multiplier", 100),
+        "current_net_price": round(current, 4),
+        "current_net_premium": round(current * int(idea.get("multiplier") or 100), 2),
+        "limit_net_price": round(limit_price, 4),
+        "trigger": trigger or price_trigger(limit_price, int(idea.get("multiplier") or 100)),
+        "reason": reason,
+        "invalidation": invalidation_text(view, date.fromisoformat(idea["expiry"])),
+        "watch_until": until.isoformat(),
+        "price_gap_pct": round(gap if gap is not None else price_gap_pct(current, limit_price), 4),
+        "status": "expired" if now.astimezone(NEW_YORK).date() > until else "waiting",
+        "view": idea.get("view"),
+    }
+
+
 def _round(value: float | None, digits: int) -> float | None:
     return None if value is None or not math.isfinite(value) else round(value, digits)
 
 
-__all__ = ["candidate_key", "dropped_ideas", "idea_key", "loss_cap", "rank_candidates", "to_idea"]
+__all__ = [
+    "candidate_key",
+    "dropped_ideas",
+    "idea_key",
+    "loss_cap",
+    "rank_candidates",
+    "to_idea",
+    "watch_entry_from_idea",
+    "watchlist_from_candidates",
+]

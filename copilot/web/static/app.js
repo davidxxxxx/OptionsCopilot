@@ -288,6 +288,22 @@ function viewLabel(view) {
   return el("span", { className: view.direction, text, title: view.rationale || "" });
 }
 
+function relationshipMarker(idea) {
+  const names = { "替代方案": "替代", "冲突": "冲突", "对冲现有持仓": "对冲", "加大现有暴露": "叠加" };
+  const labels = [...new Set((idea.relationships || []).map((item) => names[item.type]).filter(Boolean))];
+  return labels.length ? `〔${labels.join("/")}〕` : "";
+}
+
+function relationshipText(item) {
+  if (item.type === "冲突") {
+    return `冲突：与 ${item.other} 方向相反；合并 SPY 等效 Delta ${money(item.net_spy_equivalent_delta)}`;
+  }
+  if (item.type === "替代方案") return `替代方案：与 ${item.other} 只需选择一个`;
+  if (item.type === "对冲现有持仓") return `对冲：${item.other}`;
+  if (item.type === "加大现有暴露") return `风险叠加：${item.other}`;
+  return "";
+}
+
 function renderIdeas() {
   const body = document.querySelector("#ideas-table tbody");
   clear(body);
@@ -296,6 +312,8 @@ function renderIdeas() {
   detail.classList.add("hidden");
   const run = appState.run;
   renderVrpIdeas(run);
+  renderWatchlist(run);
+  renderPortfolioQuality(run);
   const ideas = run ? run.ideas || [] : [];
   renderDropped(run && run.stages && run.stages.options ? run.stages.options.dropped || [] : []);
   if (!ideas.length) {
@@ -309,12 +327,13 @@ function renderIdeas() {
   }
   empty.classList.add("hidden");
   for (const idea of ideas) {
+    const expired = ideaExpired(idea);
     const macroEvents = idea.macro_events || [];
     const expiryTitle = macroEvents.length ? `到期前有：${macroEvents.map(macroEventText).join("、")}` : "";
-    const row = el("tr", {}, [
+    const row = el("tr", { className: expired ? "quote-expired" : "" }, [
       el("td", { text: idea.rank }),
-      el("td", { className: idea.status === "new" ? "status-new" : "", text: idea.status === "new" ? "新增" : idea.status === "kept" ? "保持" : "—" }),
-      el("td", { text: `${idea.symbol}${idea.indicative ? " *" : ""}${idea.origin === "ladder" ? " ⓡ" : ""}${idea.news_unverified ? " ⚠" : ""}`, title: idea.news_unverified ? "新闻观点未经验证" : idea.origin === "ladder" ? "指数回撤阶梯规则" : idea.indicative ? "收盘参考价" : "" }),
+      el("td", { className: idea.status === "new" ? "status-new" : "", text: expired ? "报价已过期，需重新运行" : idea.status === "new" ? "新增" : idea.status === "kept" ? "保持" : "—" }),
+      el("td", { text: `${idea.symbol}${relationshipMarker(idea)}${idea.indicative ? " *" : ""}${idea.origin === "ladder" ? " ⓡ" : ""}${idea.news_unverified ? " ⚠" : ""}`, title: idea.news_unverified ? "新闻观点未经验证" : idea.origin === "ladder" ? "指数回撤阶梯规则" : idea.indicative ? "收盘参考价" : "" }),
       el("td", {}, [viewLabel(idea.view)]),
       el("td", { text: idea.structure_name }),
       el("td", { text: `${idea.expiry.slice(5)}（${idea.dte}天）${macroEvents.length ? " ⚠" : ""}`, title: expiryTitle }),
@@ -326,10 +345,40 @@ function renderIdeas() {
       el("td", { text: (idea.breakevens || []).join(" / ") || "—" }),
       el("td", { className: "num", text: `${percent(idea.view_pop)} / ${percent(idea.market_pop)}` }),
       el("td", { className: `num ${idea.edge >= 0 ? "pos" : "neg"}`, text: `${money(idea.edge)}（${percent(idea.return_on_risk, 1)}）` }),
+      el("td", { className: `num ${idea.expected_return >= 0 ? "pos" : "neg"}`, text: `${money(idea.expected_return)}（${percent(idea.expected_return_pct, 1)}）` }),
       el("td", { className: "num", text: idea.suggested_quantity === null ? "—" : String(idea.suggested_quantity) }),
     ]);
     row.addEventListener("click", () => selectIdea(idea, row));
     body.appendChild(row);
+  }
+}
+
+function renderPortfolioQuality(run) {
+  const snapshots = run ? run.snapshots || {} : {};
+  const payload = snapshots.portfolio_quality || {};
+  const summary = payload.summary || {};
+  const root = document.getElementById("combined-exposure");
+  const stressBody = document.querySelector("#stress-table tbody");
+  if (!root || !stressBody) return;
+  clear(root);
+  clear(stressBody);
+  for (const [label, row] of [["主推荐", summary.main], ["现有持仓 + 主推荐", summary.existing_plus_main]]) {
+    if (!row) continue;
+    const conflicts = (row.conflicts || []).map((item) => `${item.left} ↔ ${item.right}`).join("；") || "无冲突";
+    root.appendChild(stageBox(
+      label,
+      `最大亏损 ${money(row.max_loss)}`,
+      `SPY 等效 Delta ${money(row.spy_equivalent_delta)}；Vega ${money(row.vega, 2)}；Theta/天 ${money(row.theta, 2)}；入场成本 ${money(row.entry_costs)}；${conflicts}`,
+      (row.conflicts || []).length ? "warn" : "",
+    ));
+  }
+  for (const row of payload.stress || []) {
+    stressBody.appendChild(el("tr", {}, [
+      el("td", { text: row.scenario }),
+      el("td", { className: `num ${(row.positions_pnl || 0) >= 0 ? "pos" : "neg"}`, text: money(row.positions_pnl) }),
+      el("td", { className: `num ${(row.ideas_pnl || 0) >= 0 ? "pos" : "neg"}`, text: money(row.ideas_pnl) }),
+      el("td", { className: `num ${(row.combined_pnl || 0) >= 0 ? "pos" : "neg"}`, text: money(row.combined_pnl) }),
+    ]));
   }
 }
 
@@ -360,10 +409,11 @@ function renderVrpIdeas(run) {
 
 function appendCompactIdeaRow(body, idea) {
   const macroEvents = idea.macro_events || [];
-  body.appendChild(el("tr", {}, [
+  const expired = ideaExpired(idea);
+  body.appendChild(el("tr", { className: expired ? "quote-expired" : "" }, [
     el("td", { text: idea.rank }),
-    el("td", { text: idea.status === "new" ? "新增" : idea.status === "kept" ? "保持" : "—" }),
-    el("td", { text: idea.symbol }),
+    el("td", { text: expired ? "报价已过期，需重新运行" : idea.status === "new" ? "新增" : idea.status === "kept" ? "保持" : "—" }),
+    el("td", { text: `${idea.symbol}${relationshipMarker(idea)}` }),
     el("td", {}, [viewLabel(idea.view)]),
     el("td", { text: idea.structure_name }),
     el("td", { text: `${idea.expiry.slice(5)}（${idea.dte}天）${macroEvents.length ? " ⚠" : ""}` }),
@@ -375,8 +425,38 @@ function appendCompactIdeaRow(body, idea) {
     el("td", { text: (idea.breakevens || []).join(" / ") || "—" }),
     el("td", { className: "num", text: `${percent(idea.view_pop)} / ${percent(idea.market_pop)}` }),
     el("td", { className: `num ${idea.edge >= 0 ? "pos" : "neg"}`, text: `${money(idea.edge)}（${percent(idea.return_on_risk, 1)}）` }),
+    el("td", { className: `num ${idea.expected_return >= 0 ? "pos" : "neg"}`, text: `${money(idea.expected_return)}（${percent(idea.expected_return_pct, 1)}）` }),
     el("td", { className: "num", text: idea.suggested_quantity === null ? "—" : String(idea.suggested_quantity) }),
   ]));
+}
+
+function renderWatchlist(run) {
+  const body = document.querySelector("#watchlist-table tbody");
+  const empty = document.getElementById("watchlist-empty");
+  if (!body || !empty) return;
+  clear(body);
+  const snapshots = run ? run.snapshots || {} : {};
+  const entries = snapshots.watchlist ? snapshots.watchlist.list || [] : [];
+  for (const entry of entries) {
+    const expired = entry.status === "expired";
+    body.appendChild(el("tr", { className: expired ? "quote-expired" : "" }, [
+      el("td", { text: entry.symbol }),
+      el("td", { text: entry.structure_name || entry.structure }),
+      el("td", { className: "legs", text: (entry.legs || []).map(legText).join(" / ") }),
+      el("td", { className: "num", text: `${entry.current_net_premium >= 0 ? "付" : "收"} ${money(Math.abs(entry.current_net_premium))}` }),
+      el("td", { text: entry.trigger }),
+      el("td", { text: entry.invalidation }),
+      el("td", { text: entry.watch_until }),
+      el("td", { text: expired ? "已失效" : entry.reason === "live_price_invalid" ? "实时价格未通过" : entry.reason === "event_blackout" ? "等待事件" : "等待价格" }),
+    ]));
+  }
+  empty.classList.toggle("hidden", entries.length > 0);
+}
+
+function ideaExpired(idea) {
+  if (!idea || !idea.valid_until) return false;
+  const timestamp = new Date(idea.valid_until).getTime();
+  return Number.isFinite(timestamp) && Date.now() > timestamp;
 }
 
 async function refreshEventStudy() {
@@ -532,12 +612,15 @@ function selectIdea(idea, row) {
   clear(detail);
   const view = idea.view || {};
   const tags = [];
+  const expired = ideaExpired(idea);
+  if (expired) tags.push(el("span", { className: "tag warn", text: "报价已过期，需重新运行" }));
   if (idea.indicative) tags.push(el("span", { className: "tag warn", text: "收盘参考价（IB 模型价±估算价差），开盘后需核实" }));
   else if (idea.data_source === "cboe") tags.push(el("span", { className: "tag warn", text: "CBOE 延迟报价（交易时段约 15 分钟，休市为收盘价）" }));
   else if (idea.delayed_data) tags.push(el("span", { className: "tag warn", text: "非实时报价" }));
   if (idea.live_net_premium !== undefined && idea.live_net_premium !== null) {
-    tags.push(el("span", { className: "tag", text: `IBKR 实时中间价净权利金 ${money(idea.live_net_premium)}（延迟估算 ${money(idea.net_premium)}）` }));
+    tags.push(el("span", { className: "tag", text: `IBKR 实时估算成交净权利金 ${money(idea.live_net_premium)}（原报价 ${money(idea.net_premium)}）` }));
   }
+  if (idea.opening_recheck) tags.push(el("span", { className: "tag warn", text: "开盘后需用实时价复核" }));
   if (idea.origin === "ladder") tags.push(el("span", { className: "tag", text: "指数回撤阶梯规则" }));
   if (idea.news_unverified) tags.push(el("span", { className: "tag warn", text: `新闻观点未经验证：校准系数 k=${Number(idea.calibration_k).toFixed(2)}（基于 ${(appState.calibration || {}).days || 0} 天）` }));
   if (idea.already_holding) tags.push(el("span", { className: "tag warn", text: "已持有该标的" }));
@@ -547,12 +630,49 @@ function selectIdea(idea, row) {
   if ((idea.macro_events || []).length) {
     tags.push(el("span", { className: "tag warn", text: `到期前有：${idea.macro_events.map(macroEventText).join("、")}` }));
   }
+  for (const warning of idea.assignment_warnings || []) {
+    tags.push(el("span", { className: `tag ${warning.level === "warn" ? "warn" : ""}`, text: warning.text }));
+  }
+  for (const dividend of idea.dividends || []) {
+    tags.push(el("span", {
+      className: "tag",
+      text: `除息 ${dividend.ex_date || "—"}${dividend.estimated ? "（推算）" : ""}`,
+    }));
+  }
+  const limitAmount = Math.abs(Number(idea.limit_net_price || 0) * Number(idea.multiplier || 100));
+  const limitText = Number(idea.limit_net_price) >= 0
+    ? `最高可接受净支出 ${money(limitAmount)}/组`
+    : `最低可接受净收入 ${money(limitAmount)}/组`;
+  const validityText = idea.opening_recheck
+    ? `开盘后需用实时价复核；有效至 ${localTime(idea.valid_until)}`
+    : `报价有效至 ${localTime(idea.valid_until)}`;
+  const priced = idea.priced_in || null;
+  const pricedText = !priced
+    ? ""
+    : priced.status !== "ok"
+      ? "消息后价格数据不足，未做已计价调整"
+      : `消息后已走 ${sigma(priced.moved_sigma)}（${percent(priced.priced_in, 0)}），IV 变化 ${signed(Number(priced.iv_change || 0) * 100, 1)} 点，剩余预期 ${sigma(priced.remaining_drift_sigma)}`;
+  const summaryLines = (idea.card_summary || []).map((item) => el("p", {
+    className: "idea-summary-line",
+    text: `${item.label}：${item.text || "—"}`,
+  }));
+  const greeks = idea.greeks || {};
+  const relationshipLines = (idea.relationships || [])
+    .map(relationshipText)
+    .filter(Boolean)
+    .map((text) => el("p", { className: "muted", text }));
   const left = el("div", {}, [
+    summaryLines.length ? el("div", { className: "idea-summary" }, summaryLines) : null,
     el("h3", { text: `${idea.symbol} ${idea.structure_name} ｜ 现价 ${idea.spot}` }),
     el("p", {}, tags),
+    relationshipLines.length ? el("div", { className: "idea-relationships" }, relationshipLines) : null,
     el("p", { text: `观点：${DIRECTION_NAMES[view.direction] || "—"}，信心 ${view.conviction || "—"}/5，证据分 ${signed(view.score)}，预期偏移 ${sigma(view.drift_sigma)}，${view.horizon_days || "—"} 天，${VOL_NAMES[view.volatility] || ""}${view.catalyst ? "，催化剂：" + view.catalyst : ""}` }),
     el("p", { text: view.rationale || "（无理由）" }),
+    el("p", { className: "muted", text: `预计净收益（保守）${money(idea.expected_return)}（${percent(idea.expected_return_pct, 1)} 最大亏损）；${limitText}；${validityText}` }),
+    pricedText ? el("p", { className: "muted", text: pricedText }) : null,
     el("p", { className: "muted", text: `期望优势 ${money(idea.edge)} = 观点分布下价值 − 市场分布下价值 − 滑点 ${money(idea.slippage)} − 手续费 ${money(idea.fees, 2)}；计算采用的预期涨跌 ${percent(idea.drift, 1)}（模型给出的幅度按波动率封顶）。按估算成交价：观点下期望盈亏 ${money(idea.view_ev)}，市场下 ${money(idea.market_ev)}。ATM IV ${percent(idea.atm_iv, 1)}，观点波动率 ${percent(idea.view_sigma, 1)}。${idea.risk_budget ? `单笔风险预算 ${money(idea.risk_budget)}。` : ""}报价时间 ${localTime(idea.quote_time)}` }),
+    el("p", { text: `净 Δ ${numberOrNull(greeks.delta_shares) === null ? "—" : Number(greeks.delta_shares).toFixed(2)} 股 / ${money(greeks.delta_dollars)}；Γ ${numberOrNull(greeks.gamma) === null ? "—" : Number(greeks.gamma).toFixed(4)}；ν ${money(greeks.vega, 2)}/波动率点；θ ${money(greeks.theta, 2)}/天` }),
+    el("p", { className: "muted", text: idea.greek_summary || "主要收益来源：—" }),
   ]);
   const legTable = el("table", {}, [
     el("thead", {}, [el("tr", {}, ["方向", "合约", "买价", "卖价", "估算成交", "实时买/卖", "IV", "Delta", "未平仓"].map((t) => el("th", { text: t })))]),
@@ -569,6 +689,62 @@ function selectIdea(idea, row) {
     ]))),
   ]);
   left.appendChild(el("div", { className: "table-wrap" }, [legTable]));
+  const scenarios = idea.scenarios || [];
+  if (scenarios.length) {
+    const scenarioTable = el("table", {}, [
+      el("thead", {}, [el("tr", {}, ["情景", "标的价", "估值", "盈亏", "% 最大亏损"].map((text) => el("th", { text })))]),
+      el("tbody", {}, scenarios.map((item) => el("tr", {}, [
+        el("td", { text: item.scenario }),
+        el("td", { className: "num", text: money(item.spot, 2) }),
+        el("td", { className: "num", text: money(item.valuation) }),
+        el("td", { className: `num ${(item.pnl || 0) >= 0 ? "pos" : "neg"}`, text: money(item.pnl) }),
+        el("td", { className: "num", text: percent(item.max_loss_pct, 1) }),
+      ]))),
+    ]);
+    left.appendChild(el("details", {}, [
+      el("summary", { text: "关键情景重估" }),
+      el("div", { className: "table-wrap" }, [scenarioTable]),
+    ]));
+  }
+  if (idea.calendar_sensitivity) {
+    const sensitivity = idea.calendar_sensitivity;
+    const sensitivityTable = el("table", {}, [
+      el("thead", {}, [el("tr", {}, ["远月波动情景", "估值", "盈亏"].map((text) => el("th", { text })))]),
+      el("tbody", {}, (sensitivity.rows || []).map((item) => el("tr", {}, [
+        el("td", { text: item.scenario }),
+        el("td", { className: "num", text: money(item.valuation) }),
+        el("td", { className: `num ${(item.pnl || 0) >= 0 ? "pos" : "neg"}`, text: money(item.pnl) }),
+      ]))),
+    ]);
+    left.appendChild(el("details", {}, [
+      el("summary", { text: "远月 IV ±3 点时的估值" }),
+      el("p", { className: "muted", text: sensitivity.note }),
+      el("div", { className: "table-wrap" }, [sensitivityTable]),
+    ]));
+  }
+  const alternatives = idea.alternatives || [];
+  if (alternatives.length) {
+    const table = el("table", {}, [
+      el("thead", {}, [el("tr", {}, ["结构", "保守预期", "POP", "盈亏平衡 σ", "最大盈利", "Vega", "Theta/天", "所需涨跌", "可采用", "说明"].map((text) => el("th", { text })))]),
+      el("tbody", {}, alternatives.map((item) => el("tr", {}, [
+        el("td", { text: item.structure }),
+        el("td", { className: "num", text: money(item.expected_return) }),
+        el("td", { className: "num", text: percent(item.pop, 1) }),
+        el("td", { className: "num", text: sigma(item.breakeven_sigma) }),
+        el("td", { className: "num", text: item.max_profit === null ? "无上限" : money(item.max_profit) }),
+        el("td", { className: "num", text: money(item.vega, 2) }),
+        el("td", { className: "num", text: money(item.theta, 2) }),
+        el("td", { className: "num", text: percent(item.required_move_pct, 1) }),
+        el("td", { text: item.admissible ? "是" : "否" }),
+        el("td", { text: item.explanation }),
+      ]))),
+    ]);
+    const details = el("details", {}, [
+      el("summary", { text: "同一观点的其他做法" }),
+      el("div", { className: "table-wrap" }, [table]),
+    ]);
+    left.appendChild(details);
+  }
   const cited = appState.run && appState.run.cited_news ? appState.run.cited_news : {};
   const items = (view.news_ids || []).map((id) => cited[String(id)]).filter(Boolean);
   const right = el("div", {}, [
@@ -739,6 +915,28 @@ function renderTrackingSummary(stats) {
   summary.appendChild(stageBox("预测 vs 实际", percent(stats.predicted_return_on_risk, 1), `实际 ${percent(stats.return_on_risk, 1)}`, ""));
   summary.appendChild(stageBox("持有中", `${stats.open || 0} 笔`, `浮动盈亏 ${money(stats.open_unrealized)}`, (stats.open_unrealized || 0) >= 0 ? "pos" : "neg"));
   setText("tracking-sample", stats.enough_sample ? "样本已达到最低观察门槛。" : `样本不足（已平仓 ${stats.closed || 0} 笔 < ${stats.min_sample || 30} 笔），结论仅供参考`);
+  renderOriginQuality(stats);
+}
+
+function renderOriginQuality(stats) {
+  const body = document.querySelector("#origin-quality-table tbody");
+  if (!body) return;
+  clear(body);
+  const names = { news: "新闻", ladder: "阶梯", event: "事件", macro: "事件", vrp: "VRP" };
+  for (const [origin, row] of Object.entries(stats.origin_quality || {})) {
+    const attribution = Object.entries(row.attribution || {}).map(([key, value]) => `${key} ${money(value)}`).join("；");
+    const excess = Object.entries(row.benchmark_excess || {}).map(([key, value]) => `${key} ${money(value)}`).join("；");
+    const interval = row.ci95 || [];
+    body.appendChild(el("tr", {}, [
+      el("td", { text: names[origin] || origin }),
+      el("td", { text: row.verdict }),
+      el("td", { className: "num", text: row.count || 0 }),
+      el("td", { className: "num", text: percent(row.mean_return_on_risk, 1) }),
+      el("td", { text: `${percent(interval[0], 1)} ～ ${percent(interval[1], 1)}` }),
+      el("td", { className: "num", text: percent(row.direction_hit_rate, 1) }),
+      el("td", { text: `${attribution || "无归因"}${excess ? `；超额：${excess}` : ""}` }),
+    ]));
+  }
 }
 
 function renderTrackingGroups(stats) {
@@ -799,12 +997,16 @@ async function selectTracking(id, selectedRow) {
   const idea = record.entry.idea;
   const state = record.entry.market_state;
   const marks = el("table", {}, [
-    el("thead", {}, [el("tr", {}, ["时间", "现价", "估值", "盈亏", "剩余天数"].map((text) => el("th", { text })))]),
+    el("thead", {}, [el("tr", {}, ["时间", "现价", "估值", "盈亏", "Delta", "Gamma", "Vega", "Theta/天", "剩余天数"].map((text) => el("th", { text })))]),
     el("tbody", {}, (record.marks || []).map((mark) => el("tr", {}, [
       el("td", { text: localTime(mark.marked_at) }),
       el("td", { className: "num", text: money(mark.spot, 2) }),
       el("td", { className: "num", text: money(mark.value, 2) }),
       el("td", { className: `num ${(mark.pnl || 0) >= 0 ? "pos" : "neg"}`, text: money(mark.pnl, 2) }),
+      el("td", { className: "num", text: money((mark.greeks || {}).delta_shares, 2) }),
+      el("td", { className: "num", text: money((mark.greeks || {}).gamma, 3) }),
+      el("td", { className: "num", text: money((mark.greeks || {}).vega, 2) }),
+      el("td", { className: "num", text: money((mark.greeks || {}).theta, 2) }),
       el("td", { className: "num", text: mark.dte }),
     ]))),
   ]);

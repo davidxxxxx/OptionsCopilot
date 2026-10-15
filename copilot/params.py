@@ -8,7 +8,7 @@ from typing import Any
 
 from copilot.config import Settings
 
-SCORING_REVISION = 7
+SCORING_REVISION = 8
 
 
 def params_payload(settings: Settings) -> dict[str, Any]:

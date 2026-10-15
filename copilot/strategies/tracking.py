@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import random
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from typing import Any
@@ -9,6 +10,7 @@ from typing import Any
 from copilot.config import RulesSettings, VrpSettings
 from copilot.market.models import OptionQuote, valid_price
 from copilot.strategies.portfolio import profit_exit
+from copilot.strategies.decision_portfolio import option_greeks
 
 
 def entry_record(
@@ -55,11 +57,15 @@ def mark_idea(
     fill_ratio: float,
     marked_at: datetime,
     quote_time: datetime | None,
+    previous_mark: Mapping[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     idea = entry["idea"]
     value = 0.0
     value_mid = 0.0
     expiries: list[date] = []
+    net_greeks = {"delta_shares": 0.0, "gamma": 0.0, "vega": 0.0, "theta": 0.0}
+    iv_weighted = 0.0
+    iv_weight = 0.0
     for leg in idea["legs"]:
         expiry = date.fromisoformat(leg["expiry"])
         quantity = int(leg["signed_quantity"])
@@ -75,13 +81,38 @@ def mark_idea(
         value += quantity * exit_price
         value_mid += quantity * midpoint
         expiries.append(expiry)
+        calculated = option_greeks(
+            spot,
+            float(leg["strike"]),
+            max((expiry - today).days, 1) / 365,
+            float(quote.iv or leg.get("iv") or idea.get("atm_iv") or 0.25),
+            leg["right"],
+        )
+        scale = quantity * int(idea.get("multiplier") or 100)
+        net_greeks["delta_shares"] += scale * (
+            quote.delta if quote.delta is not None else calculated["delta"]
+        )
+        net_greeks["gamma"] += scale * (
+            quote.gamma if quote.gamma is not None else calculated["gamma"]
+        )
+        net_greeks["vega"] += scale * (
+            quote.vega if quote.vega is not None else calculated["vega"]
+        )
+        net_greeks["theta"] += scale * (
+            quote.theta if quote.theta is not None else calculated["theta"]
+        )
+        if quote.iv is not None:
+            iv_weighted += abs(quantity) * quote.iv
+            iv_weight += abs(quantity)
     multiplier = int(idea.get("multiplier") or 100)
     net_debit = float(idea["net_debit"])
     fees = float(idea.get("fees") or 0.0)
     pnl = (value - net_debit) * multiplier - fees
     pnl_mid = (value_mid - net_debit) * multiplier - fees
     max_loss = float(idea.get("max_loss") or 0.0)
-    return {
+    current_iv = iv_weighted / iv_weight if iv_weight else float(idea.get("atm_iv") or 0.25)
+    net_greeks["delta_dollars"] = net_greeks["delta_shares"] * spot
+    mark = {
         "marked_at": marked_at.isoformat(),
         "quote_time": quote_time.isoformat() if quote_time else None,
         "spot": round(spot, 2),
@@ -91,7 +122,15 @@ def mark_idea(
         "pnl": round(pnl, 2),
         "pnl_mid": round(pnl_mid, 2),
         "return_on_risk": round(pnl / max_loss, 4) if max_loss > 0 else None,
+        "iv": round(current_iv, 6),
+        "greeks": {key: round(value, 6) for key, value in net_greeks.items()},
     }
+    mark["benchmarks"] = _mark_benchmarks(idea, quotes, spot=spot)
+    mark["direction_hit"] = _direction_hit(idea, spot)
+    mark["attribution"] = _attribution(
+        idea, mark, previous_mark, marked_at=marked_at
+    )
+    return mark
 
 
 def exit_decision(
@@ -154,7 +193,10 @@ def settle_unmarked(
         "approximate": True,
     }
     if last_mark is not None:
-        for key in ("spot", "value", "pnl", "pnl_mid", "return_on_risk"):
+        for key in (
+            "spot", "value", "pnl", "pnl_mid", "return_on_risk",
+            "attribution", "benchmarks", "direction_hit",
+        ):
             payload[key] = last_mark.get(key)
     return payload
 
@@ -162,19 +204,25 @@ def settle_unmarked(
 def tracking_stats(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     closed = [row for row in rows if row.get("status") == "closed"]
     opened = [row for row in rows if row.get("status") == "open"]
-    settled = [row for row in closed if _number((row.get("exit") or {}).get("pnl")) is not None]
+    approximate = [row for row in closed if bool((row.get("exit") or {}).get("approximate"))]
+    settled = [
+        row for row in closed
+        if not bool((row.get("exit") or {}).get("approximate"))
+        and _number((row.get("exit") or {}).get("pnl")) is not None
+    ]
     core = _metrics(settled)
     result = {
         "closed": len(closed),
         "open": len(opened),
         "unsettled": len(closed) - len(settled),
+        "approximate_exits": len(approximate),
         **core,
         "open_unrealized": round(sum(
             _number((row.get("mark") or {}).get("pnl")) or 0.0 for row in opened
         ), 2),
         "exit_reasons": _counts((row.get("exit") or {}).get("code") for row in closed),
         "min_sample": 30,
-        "enough_sample": len(closed) >= 30,
+        "enough_sample": len(settled) >= 30,
     }
     groupings = {
         "by_origin": lambda row: row.get("origin") or "—",
@@ -197,6 +245,22 @@ def tracking_stats(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         for row in settled:
             buckets.setdefault(key_fn(row), []).append(row)
         result[name] = {key: _group_metrics(items) for key, items in sorted(buckets.items())}
+    result["origin_quality"] = {
+        origin: _origin_quality(items)
+        for origin, items in _bucket(settled, lambda row: str(row.get("origin") or "news")).items()
+    }
+    for origin in ("news", "ladder", "macro", "vrp"):
+        result["origin_quality"].setdefault(origin, _origin_quality(()))
+    result["actual_vs_paper"] = {
+        "actual": _metrics([
+            row for row in settled
+            if bool((((row.get("entry") or {}).get("idea") or {}).get("taken")))
+        ]),
+        "paper": _metrics([
+            row for row in settled
+            if not bool((((row.get("entry") or {}).get("idea") or {}).get("taken")))
+        ]),
+    }
     return result
 
 
@@ -223,6 +287,7 @@ def _metrics(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     risk_total = sum(risks)
     wins = sum(value > 0 for value in pnls)
     return {
+        "count": len(rows),
         "wins": wins,
         "win_rate": wins / len(rows) if rows else None,
         "pnl_total": round(pnl_total, 2),
@@ -244,6 +309,202 @@ def _group_metrics(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "return_on_risk": metrics["return_on_risk"],
         "predicted_return_on_risk": metrics["predicted_return_on_risk"],
     }
+
+
+def _attribution(
+    idea: Mapping[str, Any],
+    mark: Mapping[str, Any],
+    previous_mark: Mapping[str, Any] | None,
+    *,
+    marked_at: datetime,
+) -> dict[str, Any]:
+    previous_spot = float(
+        (previous_mark or {}).get("spot") or idea.get("spot") or mark.get("spot") or 0.0
+    )
+    current_spot = float(mark.get("spot") or previous_spot)
+    previous_iv = float((previous_mark or {}).get("iv") or idea.get("atm_iv") or mark.get("iv") or 0.25)
+    current_iv = float(mark.get("iv") or previous_iv)
+    previous_greeks = (previous_mark or {}).get("greeks") or idea.get("greeks") or {}
+    delta_s = current_spot - previous_spot
+    elapsed_days = 0.0
+    if previous_mark and previous_mark.get("marked_at"):
+        elapsed_days = max(
+            0.0,
+            (marked_at - datetime.fromisoformat(str(previous_mark["marked_at"]))).total_seconds()
+            / 86400,
+        )
+    components = {
+        "delta": float(previous_greeks.get("delta_shares") or 0.0) * delta_s,
+        "gamma": 0.5 * float(previous_greeks.get("gamma") or 0.0) * delta_s * delta_s,
+        "vega": float(previous_greeks.get("vega") or 0.0) * (current_iv - previous_iv) * 100,
+        "theta": float(previous_greeks.get("theta") or 0.0) * elapsed_days,
+        "costs": 0.0,
+    }
+    if previous_mark is None:
+        components["costs"] = -(
+            float(idea.get("slippage") or 0.0) + float(idea.get("fees") or 0.0) / 2
+        )
+    pnl_change = float(mark.get("pnl") or 0.0) - float((previous_mark or {}).get("pnl") or 0.0)
+    components["residual"] = pnl_change - sum(components.values())
+    previous_total = (previous_mark or {}).get("attribution") or {}
+    cumulative = {
+        key: float(previous_total.get(key) or 0.0) + value
+        for key, value in components.items()
+    }
+    return {key: round(value, 4) for key, value in cumulative.items()}
+
+
+def _mark_benchmarks(
+    idea: Mapping[str, Any],
+    quotes: Mapping[tuple[date, float, str], OptionQuote],
+    *,
+    spot: float,
+) -> dict[str, float]:
+    benchmarks = idea.get("benchmarks") or {}
+    entry_spot = float(benchmarks.get("entry_spot") or idea.get("spot") or spot)
+    underlying = float(benchmarks.get("delta_shares") or 0.0) * (spot - entry_spot)
+    vertical = benchmarks.get("vertical")
+    vertical_pnl = 0.0
+    if isinstance(vertical, Mapping):
+        current = 0.0
+        complete = True
+        for leg in vertical.get("legs") or ():
+            quote = quotes.get((
+                date.fromisoformat(str(leg["expiry"])),
+                round(float(leg["strike"]), 4),
+                str(leg["right"]),
+            ))
+            if quote is None or quote.mid is None:
+                complete = False
+                break
+            current += int(leg["signed_quantity"]) * quote.mid * int(leg.get("multiplier") or 100)
+        if complete:
+            vertical_pnl = float(vertical.get("scale") or 1.0) * (
+                current - float(vertical.get("entry_value") or 0.0)
+            )
+    return {
+        "underlying": round(underlying, 2),
+        "vertical": round(vertical_pnl, 2),
+        "cash": 0.0,
+    }
+
+
+def _direction_hit(idea: Mapping[str, Any], spot: float) -> bool | None:
+    entry_spot = float(idea.get("spot") or 0.0)
+    direction = str(((idea.get("view") or {}).get("direction") or "neutral"))
+    if entry_spot <= 0 or direction not in {"bullish", "bearish"}:
+        return None
+    move = spot - entry_spot
+    return move > 0 if direction == "bullish" else move < 0
+
+
+def _origin_quality(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    metrics = _metrics(rows)
+    returns = [
+        value for row in rows
+        if (value := _number((row.get("exit") or {}).get("return_on_risk"))) is not None
+    ]
+    low, high = _clustered_ci(rows)
+    chronological = sorted(
+        rows,
+        key=lambda row: str(
+            (row.get("exit") or {}).get("at") or row.get("entered_at") or ""
+        ),
+    )
+    pnl_values = [
+        _number((row.get("exit") or {}).get("pnl")) or 0.0
+        for row in chronological
+    ]
+    cumulative = 0.0
+    peak = 0.0
+    max_drawdown = 0.0
+    for pnl in pnl_values:
+        cumulative += pnl
+        peak = max(peak, cumulative)
+        max_drawdown = max(max_drawdown, peak - cumulative)
+    hits = [
+        value for row in rows
+        if isinstance((value := (row.get("exit") or {}).get("direction_hit")), bool)
+    ]
+    attribution = _mean_mapping(
+        [(row.get("exit") or {}).get("attribution") or {} for row in rows]
+    )
+    benchmark_excess = _mean_mapping([
+        {
+            name: (_number((row.get("exit") or {}).get("pnl")) or 0.0) - float(value or 0.0)
+            for name, value in ((row.get("exit") or {}).get("benchmarks") or {}).items()
+        }
+        for row in rows
+    ])
+    verdict = "未验证"
+    if len(rows) >= 30:
+        if low is not None and low > 0:
+            verdict = "有效"
+        elif high is not None and high < 0:
+            verdict = "无效"
+        else:
+            verdict = "不确定"
+    return {
+        "count": len(rows),
+        "win_rate": metrics["win_rate"],
+        "mean_return_on_risk": _mean(returns),
+        "ci95": [low, high],
+        "max_drawdown": round(max_drawdown, 2),
+        "worst_5pct": _percentile(returns, 0.05),
+        "direction_hit_rate": sum(hits) / len(hits) if hits else None,
+        "attribution": attribution,
+        "benchmark_excess": benchmark_excess,
+        "verdict": verdict,
+        "verified": verdict == "有效",
+    }
+
+
+def _clustered_ci(rows: Sequence[Mapping[str, Any]]) -> tuple[float | None, float | None]:
+    buckets = _bucket(rows, lambda row: str(row.get("entered_at") or "")[:10])
+    if not buckets:
+        return None, None
+    keys = sorted(buckets)
+    rng = random.Random(20261014)
+    estimates = []
+    for _ in range(1000):
+        sample = [row for _key in keys for row in buckets[rng.choice(keys)]]
+        values = [
+            value for row in sample
+            if (value := _number((row.get("exit") or {}).get("return_on_risk"))) is not None
+        ]
+        if values:
+            estimates.append(sum(values) / len(values))
+    if not estimates:
+        return None, None
+    estimates.sort()
+    return (
+        round(estimates[int(0.025 * (len(estimates) - 1))], 4),
+        round(estimates[int(0.975 * (len(estimates) - 1))], 4),
+    )
+
+
+def _bucket(
+    rows: Sequence[Mapping[str, Any]], key_fn: Any
+) -> dict[str, list[Mapping[str, Any]]]:
+    result: dict[str, list[Mapping[str, Any]]] = {}
+    for row in rows:
+        result.setdefault(key_fn(row), []).append(row)
+    return result
+
+
+def _mean_mapping(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
+    keys = sorted({key for row in rows for key in row})
+    return {
+        key: round(sum(float(row.get(key) or 0.0) for row in rows) / len(rows), 4)
+        for key in keys
+    } if rows else {}
+
+
+def _percentile(values: Sequence[float], quantile: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    return round(ordered[int(quantile * (len(ordered) - 1))], 4)
 
 
 def _edge_bucket(value: float | None) -> str:

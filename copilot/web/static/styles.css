@@ -132,6 +132,8 @@ tbody tr:hover { background: var(--row-hover); }
 .macro-major { font-weight: 700; }
 #ideas-table tbody tr { cursor: pointer; }
 #ideas-table tbody tr.selected { background: var(--row-hover); outline: 1px solid var(--accent); }
+.quote-expired { opacity: 0.55; filter: grayscale(0.45); }
+.quote-expired td { color: var(--muted); }
 
 .bullish { color: var(--good); }
 .bearish { color: var(--bad); }
@@ -160,6 +162,9 @@ tbody tr:hover { background: var(--row-hover); }
 }
 .detail h3 { margin: 0 0 6px; font-size: 14px; }
 .detail p { margin: 0 0 8px; }
+.idea-summary { margin-bottom: 10px; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--chip); }
+.idea-summary .idea-summary-line { margin: 0 0 3px; font-size: 12px; }
+.idea-summary .idea-summary-line:last-child { margin-bottom: 0; }
 .cited { margin: 0; padding-left: 18px; }
 .cited li { margin-bottom: 6px; }
 

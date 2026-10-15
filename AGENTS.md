@@ -65,6 +65,8 @@ The rebuild (Oct 2026) replaced the legacy governance-heavy system, which is fro
 - Bump `copilot/params.py:SCORING_REVISION` whenever code changes alter views, candidates, edge or ranking.
 - Degrade, don't block: a failing source/stage records its reason in the run's `stages` and the
   run continues. A run with no positive-edge idea is a valid result.
+- Exit alerts never treat rolling as continuation of the old trade. Any future roll proposal must
+  close the old risk conceptually and evaluate the new position as a fresh phase-1 admission.
 - Frontend: plain JS in `copilot/web/static/app.js`, DOM via `textContent`; check with
   `node --check copilot/web/static/app.js`.
 - Verify with `.venv\Scripts\python.exe -m pytest` (tests in `tests/copilot/`, fakes in `conftest.py`).

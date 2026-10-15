@@ -23,6 +23,7 @@ from copilot.config import Settings, load_settings
 from copilot.intraday_archive import IntradayArchive
 from copilot.market.cboe import CboeClient
 from copilot.market.ibkr import IbkrMarket
+from copilot.market.intraday import NasdaqIntraday
 from copilot.market.nasdaq_history import (
     daily_bars,
     daily_closes,
@@ -30,6 +31,7 @@ from copilot.market.nasdaq_history import (
     weekly_cache_date,
 )
 from copilot.news.collect import NewsSources, build_sources, collect_news
+from copilot.news.dividends import nasdaq_dividends
 from copilot.pipeline import PipelineDeps, run_pipeline, tag_pending_news
 from copilot.scheduler import RunManager, Scheduler
 from copilot.secrets import Secrets, load_secrets
@@ -259,6 +261,8 @@ def make_deps(
             if settings.options.source == "cboe" else None
         ),
         index_history=lambda symbol, today: daily_closes(symbol, today=today, timeout=10.0),
+        intraday_source=NasdaqIntraday(),
+        dividend_source=nasdaq_dividends,
     )
 
 

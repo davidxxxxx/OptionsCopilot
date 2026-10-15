@@ -103,6 +103,11 @@ class IntradaySettings:
 
 
 @dataclass(frozen=True)
+class DividendsSettings:
+    spy_quarterly_yield: float = 0.003
+
+
+@dataclass(frozen=True)
 class NewsCalibrationSettings:
     enabled: bool = True
     k0: float = 0.5
@@ -136,6 +141,7 @@ class OptionsSettings:
     cboe_timeout_seconds: float = 30.0
     # During regular hours, re-quote the final ideas' legs from IBKR in real time.
     live_refresh: bool = True
+    quote_validity_minutes: int = 30
 
 
 @dataclass(frozen=True)
@@ -184,8 +190,11 @@ class StrategySettings:
     max_ideas: int = 10
     max_ideas_per_symbol: int = 2
     risk_per_trade_pct: float = 0.10
+    unverified_risk_per_trade_pct: float | None = None
     # A new idea replaces one kept from the previous list only if it scores this much better.
     keep_margin: float = 0.25
+    min_expected_return_pct: float = 0.05
+    watch_max_price_gap_pct: float = 0.25
     # Ideas whose max loss exceeds this share of net liquidation are dropped (0 = keep all).
     max_loss_cap_pct: float = 0.20
     # A view may shift the expected price by at most this many standard deviations of the
@@ -197,6 +206,12 @@ class StrategySettings:
     tail_weight: float = 0.15
     tail_vol_multiple: float = 1.6
     core_vol_multiple: float = 0.88
+
+    def __post_init__(self) -> None:
+        if self.unverified_risk_per_trade_pct is None:
+            object.__setattr__(
+                self, "unverified_risk_per_trade_pct", self.risk_per_trade_pct
+            )
 
 
 @dataclass(frozen=True)
@@ -246,6 +261,7 @@ class Settings:
     calendar: CalendarSettings
     events: EventSettings
     intraday: IntradaySettings
+    dividends: DividendsSettings
     news_calibration: NewsCalibrationSettings
     vrp: VrpSettings
     llm: LlmSettings
@@ -308,6 +324,7 @@ def _build(raw: dict[str, Any]) -> Settings:
         calendar=_calendar_settings(raw.get("calendar", {})),
         events=_event_settings(raw.get("events", {})),
         intraday=_intraday_settings(raw.get("intraday", {})),
+        dividends=DividendsSettings(**raw.get("dividends", {})),
         news_calibration=NewsCalibrationSettings(**raw.get("news_calibration", {})),
         vrp=_vrp_settings(raw.get("vrp", {})),
         llm=LlmSettings(**raw.get("llm", {})),
@@ -327,6 +344,8 @@ def _validate(settings: Settings) -> None:
         raise ValueError("web.host must be a loopback address")
     if settings.options.source not in ("cboe", "ibkr"):
         raise ValueError("options.source must be cboe or ibkr")
+    if not 0 < settings.dividends.spy_quarterly_yield < 1:
+        raise ValueError("dividends.spy_quarterly_yield must be in (0, 1)")
     if settings.ibkr.market_data_type not in (1, 2, 3, 4):
         raise ValueError("ibkr.market_data_type must be 1-4")
     if not settings.core_symbols:
@@ -336,6 +355,12 @@ def _validate(settings: Settings) -> None:
         raise ValueError("strategy DTE window is invalid")
     if not 0 <= strategy.fill_ratio <= 1:
         raise ValueError("strategy.fill_ratio must be between 0 and 1")
+    if not 0 <= strategy.min_expected_return_pct <= 1:
+        raise ValueError("strategy.min_expected_return_pct must be between 0 and 1")
+    if strategy.watch_max_price_gap_pct < 0:
+        raise ValueError("strategy.watch_max_price_gap_pct must not be negative")
+    if settings.options.quote_validity_minutes < 1:
+        raise ValueError("options.quote_validity_minutes must be positive")
     rules = settings.rules
     if len(rules.ladder_tiers) != len(rules.ladder_drift_sigma) or list(rules.ladder_tiers) != sorted(rules.ladder_tiers):
         raise ValueError("rules: ladder_tiers must be ascending and match ladder_drift_sigma")
@@ -485,6 +510,7 @@ def _merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
 
 __all__ = [
     "CalendarSettings",
+    "DividendsSettings",
     "EventSettings",
     "IbkrSettings",
     "IntradaySettings",

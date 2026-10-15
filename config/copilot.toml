@@ -49,6 +49,7 @@ source = "cboe"
 cboe_timeout_seconds = 30
 # During regular hours, re-quote the final ideas' legs from IBKR in real time.
 live_refresh = true
+quote_validity_minutes = 30
 
 [news]
 lookback_hours = 24
@@ -119,6 +120,10 @@ ibkr_requests_per_day = 60
 ibkr_request_spacing_seconds = 10
 ibkr_client_id_offset = 10
 
+[dividends]
+# SPY fallback when Nasdaq returns no dividend rows: estimated quarterly cash yield.
+spy_quarterly_yield = 0.003
+
 [news_calibration]
 enabled = true
 k0 = 0.5
@@ -183,9 +188,15 @@ max_ideas = 10
 max_ideas_per_symbol = 2
 # Advisory sizing only: suggested contracts keep max loss under this share of net liquidation.
 risk_per_trade_pct = 0.10
+# Keep equal to risk_per_trade_pct for no behaviour change until configured otherwise.
+unverified_risk_per_trade_pct = 0.10
 # Stickiness: a new idea replaces one from the previous list only if its edge/risk is this
 # much better (0.25 = 25%).
 keep_margin = 0.25
+# Both conservative expected profit and edge must clear this fraction of max loss.
+min_expected_return_pct = 0.05
+# Observe near-miss prices only when the required improvement is within this fraction.
+watch_max_price_gap_pct = 0.25
 # Never open short-premium structures (credit spreads, condors, calendars, diagonals) whose
 # short leg spans an earnings date.
 no_short_premium_through_earnings = true

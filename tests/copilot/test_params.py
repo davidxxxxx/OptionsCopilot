@@ -9,8 +9,11 @@ from copilot.params import SCORING_REVISION, params_payload, params_version
 
 
 def test_params_version_is_stable_and_tracks_only_scoring_settings(settings) -> None:
-    assert SCORING_REVISION == 7
+    assert SCORING_REVISION == 8
     version = params_version(settings)
+    assert params_payload(settings)["options"]["quote_validity_minutes"] == 30
+    assert params_payload(settings)["strategy"]["min_expected_return_pct"] == 0.05
+    assert params_payload(settings)["strategy"]["watch_max_price_gap_pct"] == 0.25
     assert params_payload(settings)["calendar"] == {
         "catalyst_symbols": list(settings.calendar.catalyst_symbols),
     }

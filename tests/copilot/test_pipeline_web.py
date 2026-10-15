@@ -309,6 +309,37 @@ def test_cboe_produces_ideas_while_ibkr_is_down(settings, store) -> None:
     assert run["ideas"][0]["suggested_quantity"] is None  # net liquidation unknown
 
 
+def test_relationship_labels_persist_on_saved_ideas_and_are_rendered(settings, store) -> None:
+    from .conftest import FakeCboe
+
+    seed_news(store)
+    configured = replace(
+        settings,
+        strategy=replace(settings.strategy, min_expected_return_pct=0.03),
+    )
+    run_id = run_pipeline(
+        _cboe_deps(
+            configured,
+            store,
+            market=FakeMarket(SPOTS),
+            cboe=FakeCboe(SPOTS),
+        ),
+        trigger="test",
+        slot="manual",
+    )
+    saved = store.get_run(run_id)["ideas"]
+    assert saved and all("relationships" in idea for idea in saved)
+    assert any(
+        item["type"] in {"替代方案", "冲突"}
+        for idea in saved
+        for item in idea["relationships"]
+    )
+
+    javascript = Path("copilot/web/static/app.js").read_text(encoding="utf-8")
+    assert "relationshipMarker(idea)" in javascript
+    assert "合并 SPY 等效 Delta" in javascript
+
+
 def test_nasdaq_closes_fill_hv20_without_ibkr_and_share_ladder_cache(settings, store) -> None:
     from .conftest import FakeCboe
 
@@ -965,10 +996,16 @@ def test_event_study_is_separate_and_main_top10_is_identical(settings, tmp_path)
 def test_vrp_is_separate_tracked_and_main_top10_is_identical(settings, tmp_path) -> None:
     from .conftest import FakeCboe
 
-    enabled_settings = replace(settings, data_dir=tmp_path / "vrp-enabled")
+    qualifying_strategy = replace(settings.strategy, min_expected_return_pct=0.03)
+    enabled_settings = replace(
+        settings,
+        data_dir=tmp_path / "vrp-enabled",
+        strategy=qualifying_strategy,
+    )
     disabled_settings = replace(
         settings,
         data_dir=tmp_path / "vrp-disabled",
+        strategy=qualifying_strategy,
         vrp=replace(settings.vrp, enabled=False),
     )
     enabled_store = Store(enabled_settings.database_path)

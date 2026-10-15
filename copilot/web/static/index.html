@@ -47,6 +47,19 @@
       </div>
       <div class="card">
         <div class="card-head">
+          <h2>如果同时持有</h2>
+          <span class="muted">按建议张数汇总；压力测试为 1 天 Black-Scholes 情景估值</span>
+        </div>
+        <div id="combined-exposure" class="stages"></div>
+        <div class="table-wrap">
+          <table id="stress-table">
+            <thead><tr><th>情景</th><th class="num">现有持仓</th><th class="num">本次推荐</th><th class="num">合计</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
           <h2>Top 10 期权组合</h2>
           <span class="muted">按“期望优势 / 最大亏损”排序；期望优势 = 你的观点相对市场定价的优势，已扣滑点和手续费；点击行查看细节</span>
         </div>
@@ -57,7 +70,7 @@
               <th>#</th><th>状态</th><th>标的</th><th>观点</th><th>结构</th><th>到期</th><th>组合</th>
               <th class="num">净权利金</th><th class="num">最大亏损</th><th class="num">最大盈利</th>
               <th class="num">盈亏比</th><th>盈亏平衡</th><th class="num">胜率 观点/市场</th>
-              <th class="num">期望优势</th><th class="num">建议张数</th>
+              <th class="num">期望优势</th><th class="num">预计净收益（保守）</th><th class="num">建议张数</th>
             </tr></thead>
             <tbody></tbody>
           </table>
@@ -65,6 +78,22 @@
         <p id="ideas-empty" class="muted hidden"></p>
         <div id="ideas-dropped" class="dropped hidden"></div>
         <div id="idea-detail" class="detail hidden"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>观察清单（价格到位再评估）</h2>
+          <span class="muted">仅作下一次重新测算的提示，不是推荐，也不计入纸面跟踪</span>
+        </div>
+        <div class="table-wrap">
+          <table id="watchlist-table">
+            <thead><tr>
+              <th>标的</th><th>结构</th><th>组合</th><th class="num">当前净价</th>
+              <th>触发条件</th><th>失效条件</th><th>观察至</th><th>状态</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="watchlist-empty" class="muted">当前没有接近入选价格或等待事件结束的组合。</p>
       </div>
       <div class="card">
         <div class="card-head">
@@ -78,7 +107,7 @@
               <th>#</th><th>状态</th><th>标的</th><th>观点</th><th>结构</th><th>到期</th><th>组合</th>
               <th class="num">净权利金</th><th class="num">最大亏损</th><th class="num">最大盈利</th>
               <th class="num">盈亏比</th><th>盈亏平衡</th><th class="num">胜率 观点/市场</th>
-              <th class="num">期望优势</th><th class="num">建议张数</th>
+              <th class="num">期望优势</th><th class="num">预计净收益（保守）</th><th class="num">建议张数</th>
             </tr></thead>
             <tbody></tbody>
           </table>
@@ -142,7 +171,7 @@
               <th>#</th><th>状态</th><th>标的</th><th>观点</th><th>结构</th><th>到期</th><th>组合</th>
               <th class="num">净权利金</th><th class="num">最大亏损</th><th class="num">最大盈利</th>
               <th class="num">盈亏比</th><th>盈亏平衡</th><th class="num">胜率 观点/市场</th>
-              <th class="num">期望优势</th><th class="num">建议张数</th>
+              <th class="num">期望优势</th><th class="num">预计净收益（保守）</th><th class="num">建议张数</th>
             </tr></thead>
             <tbody></tbody>
           </table>
@@ -313,6 +342,18 @@
         </div>
         <div id="tracking-summary" class="stages"></div>
         <p id="tracking-sample" class="muted"></p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>来源有效性、归因与基准</h2>
+          <span class="muted">仅含非近似结算；实际成交与模拟推荐分开统计</span>
+        </div>
+        <div class="table-wrap">
+          <table id="origin-quality-table">
+            <thead><tr><th>来源</th><th>结论</th><th class="num">样本</th><th class="num">平均收益风险比</th><th>95% CI</th><th class="num">方向命中</th><th>归因 / 超额</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
       <div class="card">
         <div class="card-head">

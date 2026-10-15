@@ -11,6 +11,7 @@ import logging
 import math
 import threading
 import time
+from copy import deepcopy
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
@@ -28,6 +29,7 @@ from copilot.analysis.news_calibration import (
     current_calibration,
     current_vol_calibration,
 )
+from copilot.analysis.priced_in import apply_priced_in, price_at_or_before
 from copilot.config import Settings
 from copilot.market.calendar import is_regular_session, is_trading_day
 from copilot.market.cboe import CboeChain
@@ -36,6 +38,7 @@ from copilot.market.ibkr import IbkrUnavailable
 from copilot.market.models import AccountSnapshot, ChainInfo, OptionChain, OptionQuote, Underlying
 from copilot.market.state import market_state
 from copilot.news.collect import NewsSources, collect_news
+from copilot.news.dividends import DividendEvent, weekly_dividends
 from copilot.news.macro_calendar import group_major
 from copilot.news.models import EarningsEvent, is_upcoming
 from copilot.params import params_payload, params_version
@@ -59,8 +62,36 @@ from copilot.strategies.portfolio import (
     mark_to_market,
     portfolio_risk,
 )
-from copilot.strategies.ranking import candidate_key, dropped_ideas, idea_key, loss_cap, rank_candidates
-from copilot.strategies.tracking import entry_record, exit_decision, mark_idea, settle_unmarked
+from copilot.strategies.decision_quality import annotate_validity, is_admissible, reprice_metrics
+from copilot.strategies.decision_portfolio import (
+    allocate_joint_budget,
+    annotate_phase3_idea,
+    annotate_idea_beta,
+    annotate_relationships,
+    beta_to_spy,
+    combined_exposure,
+    fixed_vertical_benchmark,
+    match_open_position,
+    stress_test,
+    structure_alternatives,
+)
+from copilot.strategies.ranking import (
+    candidate_key,
+    dropped_ideas,
+    idea_key,
+    loss_cap,
+    rank_candidates,
+    to_idea,
+    watch_entry_from_idea,
+    watchlist_from_candidates,
+)
+from copilot.strategies.tracking import (
+    entry_record,
+    exit_decision,
+    mark_idea,
+    settle_unmarked,
+    tracking_stats,
+)
 from copilot.strategies.vrp import blackout_event, candidate_block_reason, entry_block_reason
 
 log = logging.getLogger(__name__)
@@ -101,6 +132,8 @@ class PipelineDeps:
     option_source: OptionChainSource | None = None
     # Daily closes for any symbol: (symbol, today) -> [(date, close)], oldest first.
     index_history: Callable[[str, date], list[tuple[date, float]]] | None = None
+    intraday_source: Any = None
+    dividend_source: Callable[[str], Sequence[DividendEvent]] | None = None
 
 
 def run_pipeline(
@@ -226,6 +259,7 @@ def run_pipeline(
             symbol: calibrated_view(view, float(calibration["k"]), vol_calibration)
             for symbol, view in views.items()
         }
+        priced_in_diagnostics: dict[str, dict[str, Any]] = {}
         macro_views: dict[tuple[str, str], View] = {}
         event_study: dict[str, Any] | None = None
         if settings.events.enabled:
@@ -255,6 +289,7 @@ def run_pipeline(
         history = _History(
             market, store, today, settings.ibkr.history_timeout_seconds, deps.index_history
         )
+        priced_in = _PricedInResolver(store, history, deps.intraday_source, now)
         ladder_signals = _ladder_signals(history, settings)
         rule_views = {
             ("ladder", view.symbol): view
@@ -269,8 +304,14 @@ def run_pipeline(
         ideas: list[dict[str, Any]] = []
         event_ideas: list[dict[str, Any]] = []
         vrp_ideas: list[dict[str, Any]] = []
+        watchlist: list[dict[str, Any]] = []
         vrp_conditions: dict[str, dict[str, Any]] = {}
+        vrp_views: dict[tuple[str, str], View] = {}
+        blackout_vrp: list[tuple[Candidate, View, dict[str, Any]]] = []
+        dividend_events: dict[str, list[DividendEvent]] = {}
+        dividend_failures: dict[str, str] = {}
         macro_candidates: list[Candidate] = []
+        vrp_candidates: list[Candidate] = []
         macro_failures: dict[str, str] = {}
         chains = _ChainCache(deps.option_source) if deps.option_source is not None else None
         event_dates = _upcoming_earnings(earnings, now)
@@ -306,11 +347,21 @@ def run_pipeline(
                 reason = ""
                 if chains is not None:
                     try:
+                        raw_chain = chains.chain(symbol)
+                        view, diagnostic = priced_in.adjust(
+                            symbol,
+                            view,
+                            ledger.book.get(symbol) or {},
+                            current_spot=raw_chain.underlying.price or 0.0,
+                            current_iv=raw_chain.underlying.iv30,
+                        )
                         found, underlyings[symbol] = _analyze_chain(
                             chains, symbol, view, settings, history, today=today, event_dates=events,
                             catalyst_dates=catalysts,
                             previous=[i for i in previous_by_symbol.get(symbol, ()) if i.get("origin") != "ladder"],
                         )
+                        pricing_views[symbol] = view
+                        priced_in_diagnostics[symbol] = diagnostic
                         used[symbol] = "cboe"
                     except _Skip as exc:
                         failures[symbol] = str(exc)
@@ -318,6 +369,9 @@ def run_pipeline(
                     except Exception as exc:  # CBOE down or changed: try IBKR for this symbol
                         log.warning("CBOE chain for %s failed: %s", symbol, exc)
                         reason = str(exc)[:160]
+                        view = _pricing_view(
+                            pricing_views[symbol], today=today, event_dates=events
+                        )
                 underlying = underlyings.get(symbol)
                 if found is None and ibkr_ok and underlying is not None and underlying.price:
                     if pause is not None and ibkr_analyses:
@@ -325,6 +379,15 @@ def run_pipeline(
                     ibkr_analyses += 1
                     try:
                         underlyings[symbol] = history.enrich(underlying)
+                        view, diagnostic = priced_in.adjust(
+                            symbol,
+                            view,
+                            ledger.book.get(symbol) or {},
+                            current_spot=underlyings[symbol].price or 0.0,
+                            current_iv=underlyings[symbol].iv30,
+                        )
+                        pricing_views[symbol] = view
+                        priced_in_diagnostics[symbol] = diagnostic
                         found = _analyze_symbol(
                             market, underlyings[symbol], view, settings,
                             today=today, event_dates=events, catalyst_dates=catalysts,
@@ -371,27 +434,25 @@ def run_pipeline(
                 candidates, views=pricing_views, settings=settings.strategy, account=account, previous=previous,
                 rule_views=rule_views, portfolio=risk,
             )
+            watchlist.extend(watchlist_from_candidates(
+                candidates,
+                views=pricing_views,
+                settings=settings.strategy,
+                now=now,
+                account=account,
+                rule_views=rule_views,
+                portfolio=risk,
+            ))
             dropped = dropped_ideas(
                 previous, ideas, candidates, settings=settings.strategy, account=account, analyzed=set(used),
             )
-            live_check: dict[str, Any] = {"status": "skipped"}
-            if (
-                ideas and live_session and ibkr_ok and market is not None
-                and settings.options.live_refresh
-                and any(idea["delayed_data"] for idea in ideas)
-            ):
-                try:
-                    live_check = _refresh_live_quotes(market, ideas)
-                except Exception as exc:
-                    log.warning("live re-quote failed: %s", exc)
-                    live_check = {"status": "failed", "detail": f"{type(exc).__name__}: {exc}"[:200]}
             _attach_macro_events(ideas, major, today)
             for idea in ideas:
                 if idea.get("origin") == "news":
                     idea["calibration_k"] = calibration["k"]
                     idea["calibration_verified"] = calibration["verified"]
                     idea["news_unverified"] = not calibration["verified"]
-            store.save_ideas(run_id, ideas)
+                    idea["priced_in"] = priced_in_diagnostics.get(idea["symbol"])
             if chains is not None:
                 for (_origin, symbol), macro_view in macro_views.items():
                     try:
@@ -425,8 +486,16 @@ def run_pipeline(
                     portfolio=risk,
                 )
                 _attach_macro_events(event_ideas, major, today)
+                watchlist.extend(watchlist_from_candidates(
+                    macro_candidates,
+                    views={},
+                    settings=replace(settings.strategy, max_ideas=5),
+                    now=now,
+                    account=account,
+                    rule_views=macro_views,
+                    portfolio=risk,
+                ))
             if settings.vrp.enabled and chains is not None:
-                vrp_candidates: list[Candidate] = []
                 blackout = blackout_event(major, today, settings.vrp.event_blackout_days)
                 for symbol in settings.vrp.symbols:
                     condition: dict[str, Any] = {
@@ -438,9 +507,6 @@ def run_pipeline(
                         ),
                     }
                     vrp_conditions[symbol] = condition
-                    if blackout is not None:
-                        condition.update({"status": "blocked", "reason": "重大宏观事件静默期"})
-                        continue
                     try:
                         raw_chain = chains.chain(symbol)
                         enriched = history.enrich(raw_chain.underlying, keep_iv30=True)
@@ -452,7 +518,7 @@ def run_pipeline(
                         condition["iv_minus_hv20"] = iv_minus_hv
                         reason = entry_block_reason(
                             iv30=enriched.iv30, hv20=enriched.hv20,
-                            blackout=blackout, settings=settings.vrp,
+                            blackout=None, settings=settings.vrp,
                         )
                         if reason is not None:
                             condition.update({"status": "blocked", "reason": reason})
@@ -473,9 +539,27 @@ def run_pipeline(
                             condition.update({"status": "blocked", "reason": reason})
                             continue
                         assert candidate is not None
-                        vrp_candidates.append(candidate)
+                        if not is_admissible(candidate, settings.strategy):
+                            condition.update({
+                                "status": "blocked",
+                                "reason": "按观点预计净收益不足（含模型误差余量）",
+                            })
+                            vrp_candidates.append(candidate)
+                            continue
+                        vrp_view = View(
+                            symbol=candidate.symbol, direction="neutral", conviction=1,
+                            expected_move_pct=0.0, horizon_days=38, volatility="neutral",
+                            source="vrp", structures=("bull_put_spread",),
+                            dte_min=settings.vrp.dte_min, dte_max=settings.vrp.dte_max,
+                        )
+                        vrp_views[("vrp", candidate.symbol)] = vrp_view
+                        if blackout is not None:
+                            blackout_vrp.append((candidate, vrp_view, blackout))
+                            condition.update({"status": "blocked", "reason": "重大宏观事件静默期"})
+                        else:
+                            vrp_candidates.append(candidate)
                         condition.update({
-                            "status": "met",
+                            "status": "blocked" if blackout is not None else "met",
                             "expiry": candidate.expiry.isoformat(),
                             "max_loss": round(candidate.profile.max_loss, 2),
                             "edge": round(candidate.edge, 2),
@@ -483,15 +567,6 @@ def run_pipeline(
                     except Exception as exc:
                         condition.update({"status": "blocked", "reason": f"{type(exc).__name__}: {exc}"[:160]})
                 if vrp_candidates and settings.vrp.max_ideas > 0:
-                    vrp_views = {
-                        ("vrp", candidate.symbol): View(
-                            symbol=candidate.symbol, direction="neutral", conviction=1,
-                            expected_move_pct=0.0, horizon_days=38, volatility="neutral",
-                            source="vrp", structures=("bull_put_spread",),
-                            dte_min=settings.vrp.dte_min, dte_max=settings.vrp.dte_max,
-                        )
-                        for candidate in vrp_candidates
-                    }
                     vrp_ideas = rank_candidates(
                         vrp_candidates,
                         views={},
@@ -505,6 +580,175 @@ def run_pipeline(
                         rule_views=vrp_views,
                         portfolio=risk,
                     )
+                    watchlist.extend(watchlist_from_candidates(
+                        vrp_candidates,
+                        views={},
+                        settings=replace(
+                            settings.strategy,
+                            max_ideas=settings.vrp.max_ideas,
+                            max_ideas_per_symbol=1,
+                        ),
+                        now=now,
+                        account=account,
+                        rule_views=vrp_views,
+                        portfolio=risk,
+                    ))
+                for candidate, vrp_view, event in blackout_vrp:
+                    projected = to_idea(
+                        candidate,
+                        0,
+                        view=vrp_view,
+                        settings=settings.strategy,
+                        account=account,
+                        portfolio=risk,
+                    )
+                    watchlist.append(watch_entry_from_idea(
+                        projected,
+                        view=vrp_view,
+                        now=now,
+                        trigger=f"事件后重新评估（{event['date']}）",
+                        reason="event_blackout",
+                    ))
+
+            for collection in (ideas, event_ideas, vrp_ideas):
+                for idea in collection:
+                    annotate_validity(idea, now=now, options=settings.options)
+
+            live_check: dict[str, Any] = {"status": "skipped"}
+            if (
+                live_session and ibkr_ok and market is not None and settings.options.live_refresh
+                and any(idea["delayed_data"] for idea in [*ideas, *event_ideas, *vrp_ideas])
+            ):
+                try:
+                    live_check, rejected = _refresh_live_quotes(
+                        market,
+                        [ideas, event_ideas, vrp_ideas],
+                        strategy=settings.strategy,
+                        account=account,
+                        portfolio=risk,
+                        now=now,
+                    )
+                    for idea in rejected:
+                        view_payload = idea.get("view")
+                        rejected_view = View.from_dict(view_payload) if view_payload else None
+                        watchlist.append(watch_entry_from_idea(
+                            idea, view=rejected_view, now=now, reason="live_price_invalid",
+                        ))
+                except Exception as exc:
+                    log.warning("live re-quote failed: %s", exc)
+                    live_check = {"status": "failed", "detail": f"{type(exc).__name__}: {exc}"[:200]}
+            for collection in (ideas, event_ideas, vrp_ideas):
+                for rank, idea in enumerate(collection, start=1):
+                    idea["rank"] = rank
+            quality = tracking_stats(store.tracked_ideas(limit=None)).get("origin_quality", {})
+            origin_verified = {
+                origin: bool(payload.get("verified"))
+                for origin, payload in quality.items()
+            }
+            all_ideas = [*ideas, *event_ideas, *vrp_ideas]
+            dividend_symbols = sorted(
+                {idea["symbol"] for idea in all_ideas} | {group.symbol for group in groups}
+            )
+            for symbol in dividend_symbols:
+                try:
+                    dividend_events[symbol] = weekly_dividends(
+                        store,
+                        symbol,
+                        today=today,
+                        fetcher=deps.dividend_source or (lambda _symbol: ()),
+                        spot=_dividend_spot(symbol, underlyings, all_ideas, groups),
+                        spy_quarterly_yield=settings.dividends.spy_quarterly_yield,
+                    )
+                except Exception as exc:
+                    dividend_events[symbol] = []
+                    dividend_failures[symbol] = f"{type(exc).__name__}: {exc}"[:160]
+            stages["dividends"] = {
+                "status": "partial" if dividend_failures else "ok",
+                "symbols": len(dividend_symbols),
+                "events": sum(len(events) for events in dividend_events.values()),
+                "skipped": dividend_failures,
+            }
+            spy_closes = history.nasdaq_closes("SPY")
+            beta_cache: dict[str, float | None] = {"SPY": 1.0}
+            for symbol in sorted({idea["symbol"] for idea in all_ideas} | {group.symbol for group in groups}):
+                if symbol not in beta_cache:
+                    beta_cache[symbol] = beta_to_spy(history.nasdaq_closes(symbol), spy_closes)
+            for idea in all_ideas:
+                annotate_idea_beta(idea, beta_cache.get(idea["symbol"]))
+                pool = (
+                    vrp_candidates if idea.get("origin") == "vrp"
+                    else macro_candidates if idea.get("origin") not in {"news", "ladder"}
+                    else candidates
+                )
+                idea["alternatives"] = structure_alternatives(idea, pool, settings.strategy)
+                chain = (chains.fetched().get(idea["symbol"]) if chains is not None else None)
+                vertical = None
+                if chain is not None:
+                    direction = str(((idea.get("view") or {}).get("direction") or "neutral"))
+                    if direction in {"bullish", "bearish"}:
+                        vertical = fixed_vertical_benchmark(
+                            chain.quotes,
+                            symbol=idea["symbol"],
+                            spot=float(idea.get("spot") or 0.0),
+                            today=today,
+                            direction=direction,
+                            max_loss=float(idea.get("max_loss") or 0.0),
+                            fill_ratio=settings.strategy.fill_ratio,
+                        )
+                idea["benchmarks"] = {
+                    "entry_spot": idea.get("spot"),
+                    "delta_shares": float((idea.get("greeks") or {}).get("delta_shares") or 0.0),
+                    "vertical": vertical,
+                    "cash": 0.0,
+                }
+                idea.update(match_open_position(idea, account.positions if account else ()))
+            for group in groups:
+                beta = beta_cache.get(group.symbol)
+                group.beta_to_spy = 1.0 if beta is None else beta
+                group.beta_fallback = beta is None
+                if group.net_delta is not None and group.spot is not None:
+                    group.spy_equivalent_delta = group.net_delta * group.spot * group.beta_to_spy
+            for collection in (ideas, event_ideas, vrp_ideas):
+                annotate_relationships(collection, groups)
+            budget = allocate_joint_budget(
+                [ideas, event_ideas, vrp_ideas],
+                account=account,
+                settings=settings.strategy,
+                remaining=risk.remaining if risk else None,
+                origin_verified=origin_verified,
+            )
+            for idea in all_ideas:
+                annotate_phase3_idea(
+                    idea,
+                    today=today,
+                    dividends=dividend_events.get(idea["symbol"], ()),
+                    origin_quality=quality,
+                    account=account,
+                    rules=settings.rules,
+                )
+            relationship_ideas = deepcopy(all_ideas)
+            conflicts = annotate_relationships(relationship_ideas, groups)
+            portfolio_summary = {
+                "budget": budget,
+                "relationships": [
+                    {
+                        "symbol": idea["symbol"],
+                        "structure": idea["structure"],
+                        "origin": idea.get("origin") or "news",
+                        "items": idea.get("relationships") or [],
+                    }
+                    for idea in relationship_ideas
+                ],
+                "main": combined_exposure(ideas, conflicts=conflicts),
+                "existing_plus_main": combined_exposure(ideas, groups, conflicts=conflicts),
+            }
+            stress = stress_test(all_ideas, groups, today=today)
+            stages["portfolio_quality"] = portfolio_summary
+            stages["stress_test"] = {"status": "ok", "scenarios": stress}
+            store.save_snapshot(run_id, "portfolio_quality", "summary", portfolio_summary)
+            store.save_snapshot(run_id, "portfolio_quality", "stress", stress)
+            watchlist = _dedupe_watchlist(watchlist, limit=10)
+            store.save_ideas(run_id, ideas)
             states: dict[str, dict[str, Any]] = {}
             try:
                 if not is_trading_day(today):
@@ -580,9 +824,34 @@ def run_pipeline(
                 "skipped": failures,
                 "warnings": market.warnings[:30] if market is not None else [],
             }
+        for symbol in sorted({group.symbol for group in groups} - set(dividend_events)):
+            try:
+                dividend_events[symbol] = weekly_dividends(
+                    store,
+                    symbol,
+                    today=today,
+                    fetcher=deps.dividend_source or (lambda _symbol: ()),
+                    spot=_dividend_spot(symbol, underlyings, (), groups),
+                    spy_quarterly_yield=settings.dividends.spy_quarterly_yield,
+                )
+            except Exception as exc:
+                dividend_events[symbol] = []
+                dividend_failures[symbol] = f"{type(exc).__name__}: {exc}"[:160]
+        if "dividends" not in stages:
+            stages["dividends"] = {
+                "status": "partial" if dividend_failures else "ok",
+                "symbols": len(dividend_events),
+                "events": sum(len(events) for events in dividend_events.values()),
+                "skipped": dividend_failures,
+            }
+        store.save_snapshot(run_id, "dividends", "calendar", {
+            symbol: [event.to_dict() for event in events]
+            for symbol, events in dividend_events.items()
+        })
         store.save_snapshot(run_id, "event_ideas", "list", event_ideas)
         store.save_snapshot(run_id, "vrp_ideas", "list", vrp_ideas)
         store.save_snapshot(run_id, "vrp_ideas", "conditions", vrp_conditions)
+        store.save_snapshot(run_id, "watchlist", "list", watchlist)
         if event_study is not None:
             store.save_snapshot(run_id, "event_study", "latest", event_study)
         stages["event_study"] = {
@@ -602,6 +871,7 @@ def run_pipeline(
                 group.alerts = exit_alerts(
                     group, today=today, rules=settings.rules, earnings=event_dates.get(group.symbol, ()),
                     macro_events=major_alerts,
+                    dividends=dividend_events.get(group.symbol, ()),
                     view=views.get(group.symbol), net_liquidation=account.net_liquidation,
                 )
             store.save_snapshot(run_id, "positions", "book", {
@@ -940,6 +1210,7 @@ def _track(
                 fill_ratio=settings.strategy.fill_ratio,
                 marked_at=now,
                 quote_time=chain.as_of,
+                previous_mark=row.get("mark"),
             )
         except Exception as exc:
             mark = None
@@ -1029,6 +1300,14 @@ def _tracking_exit_payload(
     entered = datetime.fromisoformat(entered_at)
     if entered.tzinfo is None:
         entered = entered.replace(tzinfo=timezone.utc)
+    attribution = dict(payload.get("attribution") or {})
+    if attribution:
+        idea = (row.get("entry") or {}).get("idea") or {}
+        exit_cost = abs(float(payload.get("pnl_mid") or 0.0) - float(payload.get("pnl") or 0.0))
+        exit_cost += float(idea.get("fees") or 0.0) / 2
+        attribution["costs"] = float(attribution.get("costs") or 0.0) - exit_cost
+        attribution["residual"] = float(attribution.get("residual") or 0.0) + exit_cost
+        attribution = {key: round(value, 4) for key, value in attribution.items()}
     return {
         "code": payload["code"],
         "text": payload["text"],
@@ -1039,6 +1318,9 @@ def _tracking_exit_payload(
         "pnl": payload.get("pnl"),
         "pnl_mid": payload.get("pnl_mid"),
         "return_on_risk": payload.get("return_on_risk"),
+        "attribution": attribution or None,
+        "benchmarks": payload.get("benchmarks"),
+        "direction_hit": payload.get("direction_hit"),
         "days_held": max(0, (now.date() - entered.date()).days),
         "approximate": bool(payload.get("approximate")),
     }
@@ -1065,19 +1347,171 @@ def _mark_groups(groups: Sequence[PositionGroup], chains: "_ChainCache | None") 
         except Exception as exc:
             log.warning("could not mark %s positions: %s", group.symbol, exc)
             continue
-        mark_to_market(group, {(q.expiry, q.strike, q.right): q for q in chain.quotes})
+        mark_to_market(
+            group,
+            {(q.expiry, q.strike, q.right): q for q in chain.quotes},
+            spot=chain.underlying.price,
+        )
 
 
-def _refresh_live_quotes(market: MarketSource, ideas: list[dict[str, Any]]) -> dict[str, Any]:
-    """Attach IBKR real-time bid/ask to every leg of the delayed-data ideas."""
+class _PricedInResolver:
+    """Resolve publication prices once per symbol and adjust ledger pricing views."""
+
+    def __init__(self, store: Store, history: "_History", intraday_source: Any, now: datetime) -> None:
+        self.store = store
+        self.history = history
+        self.intraday_source = intraday_source
+        self.now = now
+        self.today = now.astimezone(NEW_YORK).date()
+        self._today_bars: dict[str, list[list[Any]]] = {}
+
+    def adjust(
+        self,
+        symbol: str,
+        view: View,
+        ledger_entry: dict[str, Any],
+        *,
+        current_spot: float,
+        current_iv: float | None,
+    ) -> tuple[View, dict[str, Any]]:
+        if view.source != "ledger":
+            return view, {"status": "not_applicable"}
+        contributors = list(ledger_entry.get("contributors") or ())
+        prices: dict[int, tuple[float, str] | None] = {}
+        publication_ivs: dict[int, float | None] = {}
+        for contributor in contributors:
+            news_id = int(contributor.get("news_id") or 0)
+            published_at = _aware_datetime(contributor.get("published_at"))
+            if published_at is None:
+                prices[news_id] = None
+                publication_ivs[news_id] = None
+                continue
+            prices[news_id] = self._publication_price(symbol, published_at)
+            state = self.store.market_state_on(symbol, published_at.astimezone(NEW_YORK).date())
+            publication_ivs[news_id] = _state_iv(state)
+        effective_iv = current_iv
+        if effective_iv is None or effective_iv <= 0:
+            current_state = self.store.market_state_on(symbol, self.today)
+            if current_state is None:
+                current_state = self.store.latest_market_state_before(
+                    symbol, self.today + timedelta(days=1)
+                )
+            effective_iv = _state_iv(current_state)
+        return apply_priced_in(
+            view,
+            contributors,
+            current_spot=current_spot,
+            current_iv=effective_iv,
+            now=self.now,
+            publication_prices=prices,
+            publication_ivs=publication_ivs,
+            raw_drift_sigma=ledger_entry.get("drift_sigma"),
+        )
+
+    def _publication_price(
+        self, symbol: str, published_at: datetime
+    ) -> tuple[float, str] | None:
+        publication_day = published_at.astimezone(NEW_YORK).date()
+        if publication_day == self.today and self.intraday_source is not None:
+            if symbol not in self._today_bars:
+                try:
+                    self._today_bars[symbol] = list(self.intraday_source.fetch(symbol) or ())
+                except Exception as exc:
+                    log.warning("Nasdaq intraday publication price for %s failed: %s", symbol, exc)
+                    self._today_bars[symbol] = []
+            price = price_at_or_before(self._today_bars[symbol], published_at)
+            if price is not None:
+                return price, "nasdaq_live"
+        for source in ("nasdaq", "ibkr"):
+            price = price_at_or_before(
+                self.store.intraday_day(source, symbol, publication_day), published_at
+            )
+            if price is not None:
+                return price, f"{source}_archive"
+        snapshot = self.store.latest_underlying_before(symbol, published_at.astimezone(timezone.utc))
+        snapshot_price = _positive_number((snapshot or {}).get("price"))
+        if snapshot_price is not None:
+            return snapshot_price, "run_snapshot"
+        if not is_regular_session(published_at):
+            prior = [
+                (day, close)
+                for day, close in self.history.nasdaq_closes(symbol)
+                if day < publication_day
+            ]
+            if prior:
+                return float(prior[-1][1]), "previous_close"
+        return None
+
+
+def _aware_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    elif value:
+        try:
+            parsed = datetime.fromisoformat(str(value))
+        except ValueError:
+            return None
+    else:
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+
+
+def _positive_number(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) and number > 0 else None
+
+
+def _dividend_spot(
+    symbol: str,
+    underlyings: dict[str, Underlying],
+    ideas: Sequence[dict[str, Any]],
+    groups: Sequence[Any],
+) -> float | None:
+    underlying = underlyings.get(symbol)
+    candidates = [underlying.price if underlying is not None else None]
+    candidates.extend(idea.get("spot") for idea in ideas if idea.get("symbol") == symbol)
+    candidates.extend(group.spot for group in groups if group.symbol == symbol)
+    for candidate in candidates:
+        spot = _positive_number(candidate)
+        if spot is not None:
+            return spot
+    return None
+
+
+def _state_iv(state: dict[str, Any] | None) -> float | None:
+    if not state:
+        return None
+    return _positive_number(state.get("iv_30d"))
+
+
+def _refresh_live_quotes(
+    market: MarketSource,
+    groups: Sequence[list[dict[str, Any]]],
+    *,
+    strategy: Any,
+    account: AccountSnapshot | None,
+    portfolio: Any,
+    now: datetime | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Reprice delayed ideas with executable live fills and remove invalid prices."""
+
+    checked_at = (now or datetime.now(timezone.utc)).isoformat(timespec="seconds")
 
     def key(idea: dict[str, Any], leg: dict[str, Any]) -> tuple[str, date, float, str]:
         return idea["symbol"], date.fromisoformat(leg["expiry"]), float(leg["strike"]), leg["right"]
 
+    ideas = [idea for group in groups for idea in group]
     specs = sorted({key(idea, leg) for idea in ideas if idea["delayed_data"] for leg in idea["legs"]})
     quotes = market.live_quotes(specs)
     checked = 0
+    rejected: list[dict[str, Any]] = []
     for idea in ideas:
+        if not idea["delayed_data"]:
+            idea["live_status"] = "ok"
+            continue
         net, complete = 0.0, True
         for leg in idea["legs"]:
             live = quotes.get(key(idea, leg))
@@ -1085,12 +1519,63 @@ def _refresh_live_quotes(market: MarketSource, ideas: list[dict[str, Any]]) -> d
                 complete = False
                 continue
             leg["live_bid"], leg["live_ask"] = live
-            net += leg["signed_quantity"] * (live[0] + live[1]) / 2
+            mid = (live[0] + live[1]) / 2
+            quantity = int(leg["signed_quantity"])
+            fill = (
+                mid + strategy.fill_ratio * (live[1] - mid)
+                if quantity > 0
+                else mid - strategy.fill_ratio * (mid - live[0])
+            )
+            leg["live_fill"] = round(fill, 4)
+            net += quantity * fill
         if complete:
-            idea["live_net_premium"] = round(net * idea.get("multiplier", 100), 2)
-            idea["live_checked_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            multiplier = int(idea.get("multiplier") or 100)
+            metrics = reprice_metrics(
+                net_price_now=float(idea["net_debit"]),
+                net_price=net,
+                multiplier=multiplier,
+                view_ev_now=float(idea["view_ev"]),
+                edge_now=float(idea["edge"]),
+                max_loss_now=float(idea["max_loss"]),
+            )
+            idea["live_net_price"] = round(net, 4)
+            idea["live_net_premium"] = round(net * multiplier, 2)
+            idea["live_view_ev"] = round(metrics["view_ev"], 2)
+            idea["live_edge"] = round(metrics["edge"], 2)
+            idea["live_max_loss"] = round(metrics["max_loss"], 2)
+            idea["live_expected_return"] = round(metrics["expected_return"], 2)
+            idea["live_expected_return_pct"] = round(metrics["expected_return_pct"], 4)
+            invalid = (
+                net > float(idea["limit_net_price"]) + 1e-9
+                or metrics["max_loss"] <= 0
+                or metrics["expected_return_pct"] < strategy.min_expected_return_pct - 1e-9
+            )
+            idea["live_status"] = "price_invalid" if invalid else "ok"
+            idea["live_checked_at"] = checked_at
+            budget = (
+                account.net_liquidation * strategy.risk_per_trade_pct
+                if account and account.net_liquidation else None
+            )
+            suggested = math.floor(budget / metrics["max_loss"]) if budget and metrics["max_loss"] > 0 else None
+            cap = loss_cap(account, strategy)
+            if suggested == 0 and cap is not None and metrics["max_loss"] <= cap:
+                suggested = 1
+            remaining = getattr(portfolio, "remaining", None)
+            if suggested is not None and remaining is not None:
+                suggested = max(0, min(suggested, math.floor(max(remaining, 0.0) / metrics["max_loss"])))
+            idea["suggested_quantity"] = suggested
             checked += 1
-    return {"status": "ok", "legs": len(specs), "quoted": len(quotes), "ideas_checked": checked}
+            if invalid:
+                rejected.append(idea)
+    for group in groups:
+        group[:] = [idea for idea in group if idea.get("live_status") != "price_invalid"]
+    return ({
+        "status": "ok",
+        "legs": len(specs),
+        "quoted": len(quotes),
+        "ideas_checked": checked,
+        "price_invalid": len(rejected),
+    }, rejected)
 
 
 def _analyze_symbol(
@@ -1277,6 +1762,41 @@ def _close(market: MarketSource | None) -> None:
 
 def _dedupe(values: Sequence[str]) -> list[str]:
     return list(dict.fromkeys(values))
+
+
+def _dedupe_watchlist(
+    entries: Sequence[dict[str, Any]], *, limit: int
+) -> list[dict[str, Any]]:
+    priorities = {"live_price_invalid": 0, "event_blackout": 1, "price": 2}
+    ordered = sorted(
+        entries,
+        key=lambda entry: (
+            priorities.get(str(entry.get("reason")), 9),
+            float(entry.get("price_gap_pct") or 0.0),
+            str(entry.get("symbol") or ""),
+            str(entry.get("structure") or ""),
+        ),
+    )
+    unique: list[dict[str, Any]] = []
+    seen: set[tuple[Any, ...]] = set()
+    for entry in ordered:
+        legs = tuple(sorted(
+            (
+                leg.get("expiry"),
+                round(float(leg.get("strike") or 0.0), 4),
+                leg.get("right"),
+                int(leg.get("signed_quantity") or 0),
+            )
+            for leg in entry.get("legs") or ()
+        ))
+        key = (entry.get("symbol"), entry.get("structure"), legs)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(entry)
+        if len(unique) >= limit:
+            break
+    return unique
 
 
 __all__ = ["MarketSource", "OptionChainSource", "PipelineDeps", "run_pipeline", "tag_pending_news"]

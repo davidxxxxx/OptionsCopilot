@@ -71,4 +71,33 @@ def is_regular_session(moment: datetime) -> bool:
     return is_trading_day(local.date()) and REGULAR_OPEN <= local.time() < REGULAR_CLOSE
 
 
-__all__ = ["is_regular_session", "is_trading_day", "nyse_holidays"]
+def add_trading_days(day: date, count: int) -> date:
+    """Return the NYSE trading day ``count`` sessions after ``day``."""
+
+    current = day
+    remaining = max(count, 0)
+    while remaining:
+        current += timedelta(days=1)
+        if is_trading_day(current):
+            remaining -= 1
+    return current
+
+
+def next_session_open(moment: datetime) -> datetime:
+    """Return the next regular-session open strictly after ``moment``."""
+
+    local = moment.astimezone(NEW_YORK)
+    day = local.date()
+    open_at = datetime.combine(day, REGULAR_OPEN, NEW_YORK)
+    if not is_trading_day(day) or local >= open_at:
+        day = add_trading_days(day, 1)
+    return datetime.combine(day, REGULAR_OPEN, NEW_YORK)
+
+
+__all__ = [
+    "add_trading_days",
+    "is_regular_session",
+    "is_trading_day",
+    "next_session_open",
+    "nyse_holidays",
+]

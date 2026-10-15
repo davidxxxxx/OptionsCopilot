@@ -482,6 +482,15 @@ class Store:
         )
         return json.loads(rows[0]["payload"]) if rows else None
 
+    def latest_underlying_before(self, symbol: str, moment: datetime) -> dict[str, Any] | None:
+        rows = self._rows(
+            "SELECT s.payload FROM snapshots s JOIN runs r ON r.id=s.run_id"
+            " WHERE s.kind='underlying' AND s.key=? AND r.started_at<=?"
+            " AND r.status IN ('ok','partial') ORDER BY r.started_at DESC, r.id DESC LIMIT 1",
+            (symbol.upper(), moment.isoformat()),
+        )
+        return json.loads(rows[0]["payload"]) if rows else None
+
     # ---- parameter versions and recommendation tracking ------------------
     def save_param_set(self, version: str, payload: dict[str, Any]) -> None:
         with self._tx() as db:
