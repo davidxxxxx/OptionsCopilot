@@ -1,0 +1,347 @@
+{
+  "schema_version": 1,
+  "master_plan": "options_copilot/IMPLEMENTATION_PLAN.md",
+  "plans_directory": "options_copilot/plans",
+  "phases": {
+    "P0": {
+      "plans": [
+        "P0-01",
+        "P0-02",
+        "P0-03",
+        "P0-04"
+      ],
+      "allowlist": [
+        "data/options_copilot/evidence/checkpoints/P0/creator-transport/",
+        "data/options_copilot/evidence/checkpoints/P0/execution-cost-contract/",
+        "data/options_copilot/evidence/checkpoints/P0/initial-policy/",
+        "data/options_copilot/evidence/checkpoints/P0/market-data-pacing/",
+        "data/options_copilot/evidence/checkpoints/P0/strategy-nav-contract/",
+        "data/options_copilot/evidence/workspace/P0/",
+        "options_copilot/api/app.py",
+        "options_copilot/bridge/creator_transport.py",
+        "options_copilot/gateway/ibkr_readonly.py",
+        "options_copilot/governance/cli.py",
+        "options_copilot/governance/contracts.py",
+        "options_copilot/governance/creator_transport_contract.v1.json",
+        "options_copilot/governance/execution_cost_contract.v1.json",
+        "options_copilot/governance/initial_champion_scenario_policy.v1.json",
+        "options_copilot/governance/strategy_nav_contract.v1.json",
+        "options_copilot/operations/authority_audit.py",
+        "options_copilot/operations/capabilities.py",
+        "options_copilot/operations/creator_probe.py",
+        "options_copilot/operations/phase_allowlists.json",
+        "options_copilot/operations/readiness.py",
+        "options_copilot/operations/workspace_guard.py",
+        "tests/options_copilot/test_authority_audit.py",
+        "tests/options_copilot/test_creator_transport.py",
+        "tests/options_copilot/test_governance_contracts.py",
+        "tests/options_copilot/test_plan_allowlist_consistency.py",
+        "tests/options_copilot/test_readiness.py",
+        "tests/options_copilot/test_readiness_cli.py",
+        "tests/options_copilot/test_workspace_guard.py"
+      ]
+    },
+    "P1": {
+      "plans": [
+        "P1-01",
+        "P1-02",
+        "P1-03"
+      ],
+      "allowlist": [
+        "data/options_copilot/evidence/checkpoints/P1/ibkr-live-read/",
+        "options_copilot/bridge/coordinator.py",
+        "options_copilot/bridge/store.py",
+        "options_copilot/gateway/broker_snapshot.py",
+        "options_copilot/gateway/ibkr_readonly.py",
+        "options_copilot/market/session_calendar.py",
+        "options_copilot/performance/campaign.py",
+        "options_copilot/performance/nav_ledger.py",
+        "options_copilot/proposals.py",
+        "options_copilot/risk/authorization.py",
+        "options_copilot/risk/policy.py",
+        "options_copilot/risk/time_policy.py",
+        "tests/options_copilot/test_bridge_coordinator.py",
+        "tests/options_copilot/test_broker_snapshot.py",
+        "tests/options_copilot/test_ibkr_readonly_gateway.py",
+        "tests/options_copilot/test_market_session_calendar.py",
+        "tests/options_copilot/test_nav_ledger.py",
+        "tests/options_copilot/test_proposal_gate.py"
+      ]
+    },
+    "P2": {
+      "plans": [
+        "P2-01",
+        "P2-02"
+      ],
+      "allowlist": [
+        "data/options_copilot/evidence/checkpoints/P2/gld-dry-run/",
+        "options_copilot/api/app.py",
+        "options_copilot/approval/store.py",
+        "options_copilot/bridge/coordinator.py",
+        "options_copilot/frontend/app.js",
+        "options_copilot/frontend/index.html",
+        "options_copilot/frontend/styles.css",
+        "options_copilot/positions/__init__.py",
+        "options_copilot/positions/cli.py",
+        "options_copilot/positions/generator.py",
+        "options_copilot/positions/manager.py",
+        "options_copilot/positions/models.py",
+        "options_copilot/positions/runtime_adapter.py",
+        "options_copilot/proposals.py",
+        "tests/options_copilot/test_api_frontend.py",
+        "tests/options_copilot/test_bridge_coordinator.py",
+        "tests/options_copilot/test_gld_management_pipeline.py",
+        "tests/options_copilot/test_position_management_runtime_adapter.py",
+        "tests/options_copilot/test_position_manager.py",
+        "tests/options_copilot/test_runtime.py"
+      ]
+    },
+    "P3": {
+      "plans": [
+        "P3-01",
+        "P3-02"
+      ],
+      "allowlist": [
+        "data/options_copilot/evidence/checkpoints/P3/jin10-rotation/",
+        "data/options_copilot/evidence/checkpoints/P3/provider-live/",
+        "options_copilot/providers/__init__.py",
+        "options_copilot/providers/cli.py",
+        "options_copilot/providers/events.py",
+        "options_copilot/providers/jin10.py",
+        "options_copilot/providers/official.py",
+        "options_copilot/providers/official_sources.py",
+        "options_copilot/security/cli.py",
+        "options_copilot/security/revocation.py",
+        "options_copilot/storage/evidence.py",
+        "scripts/set_options_copilot_secret.ps1",
+        "tests/options_copilot/fixtures/evidence_v1.db",
+        "tests/options_copilot/test_config_security.py",
+        "tests/options_copilot/test_event_providers.py",
+        "tests/options_copilot/test_evidence_store.py",
+        "tests/options_copilot/test_official_calendar_provider.py",
+        "tests/options_copilot/test_official_sources.py"
+      ]
+    },
+    "P4": {
+      "plans": [
+        "P4-01",
+        "P4-02",
+        "P4-03"
+      ],
+      "allowlist": [
+        "data/options_copilot/evidence/checkpoints/P4/scanner-live/",
+        "options_copilot/config.py",
+        "options_copilot/gateway/ibkr_readonly.py",
+        "options_copilot/operations/pacing_authority.py",
+        "options_copilot/operations/readiness.py",
+        "options_copilot/scanner/__init__.py",
+        "options_copilot/scanner/cli.py",
+        "options_copilot/scanner/pacing.py",
+        "options_copilot/scanner/scheduler.py",
+        "options_copilot/scanner/service.py",
+        "options_copilot/scanner/universe.py",
+        "tests/options_copilot/test_pacing_authority.py",
+        "tests/options_copilot/test_scan_scheduler.py",
+        "tests/options_copilot/test_scanner_authority.py",
+        "tests/options_copilot/test_scanner_pacing.py",
+        "tests/options_copilot/test_universe_funnel.py"
+      ]
+    },
+    "P5": {
+      "plans": [
+        "P5-01",
+        "P5-02",
+        "P5-03",
+        "P5-04"
+      ],
+      "allowlist": [
+        "options_copilot/analytics/__init__.py",
+        "options_copilot/analytics/positioning_runtime.py",
+        "options_copilot/analytics/scenarios.py",
+        "options_copilot/analytics/volatility.py",
+        "options_copilot/decision/__init__.py",
+        "options_copilot/decision/pipeline.py",
+        "options_copilot/domain/models.py",
+        "options_copilot/execution_cost.py",
+        "options_copilot/learning_shadow.py",
+        "options_copilot/news/__init__.py",
+        "options_copilot/news/calendar.py",
+        "options_copilot/news/classifier.py",
+        "options_copilot/news/composition.py",
+        "options_copilot/news/deepseek.py",
+        "options_copilot/news/learning.py",
+        "options_copilot/news/models.py",
+        "options_copilot/news/preselection.py",
+        "options_copilot/news/preselection_store.py",
+        "options_copilot/news/reaction.py",
+        "options_copilot/news/scoring.py",
+        "options_copilot/news/service.py",
+        "options_copilot/ranking/__init__.py",
+        "options_copilot/ranking/basis.py",
+        "options_copilot/ranking/engine.py",
+        "options_copilot/ranking/evidence_manifest.py",
+        "options_copilot/ranking/portfolio.py",
+        "options_copilot/ranking/store.py",
+        "options_copilot/scanner/service.py",
+        "options_copilot/strategies/__init__.py",
+        "options_copilot/strategies/generator.py",
+        "options_copilot/strategies/templates.py",
+        "tests/options_copilot/test_decision_pipeline.py",
+        "tests/options_copilot/test_execution_cost_resolver.py",
+        "tests/options_copilot/test_learning_shadow.py",
+        "tests/options_copilot/test_news_composition.py",
+        "tests/options_copilot/test_news_core.py",
+        "tests/options_copilot/test_news_deepseek.py",
+        "tests/options_copilot/test_news_preselection_store.py",
+        "tests/options_copilot/test_news_reaction.py",
+        "tests/options_copilot/test_portfolio_ranking.py",
+        "tests/options_copilot/test_positioning_runtime.py",
+        "tests/options_copilot/test_ranking_store.py",
+        "tests/options_copilot/test_scenarios.py",
+        "tests/options_copilot/test_strategy_generator.py",
+        "tests/options_copilot/test_strategy_templates.py",
+        "tests/options_copilot/test_volatility_scenarios.py"
+      ]
+    },
+    "P6": {
+      "plans": [
+        "P6-01",
+        "P6-02"
+      ],
+      "allowlist": [
+        "data/options_copilot/evidence/checkpoints/P6/browser/",
+        "options_copilot/UI_SPEC.md",
+        "options_copilot/api/__init__.py",
+        "options_copilot/api/app.py",
+        "options_copilot/approval/__init__.py",
+        "options_copilot/approval/proofs.py",
+        "options_copilot/approval/store.py",
+        "options_copilot/bridge/__init__.py",
+        "options_copilot/bridge/store.py",
+        "options_copilot/config.py",
+        "options_copilot/decision/pipeline.py",
+        "options_copilot/frontend/app.js",
+        "options_copilot/frontend/index.html",
+        "options_copilot/frontend/styles.css",
+        "options_copilot/gateway/__init__.py",
+        "options_copilot/gateway/ibkr_readonly.py",
+        "options_copilot/market/__init__.py",
+        "options_copilot/market/session_calendar.py",
+        "options_copilot/news_runtime.py",
+        "options_copilot/production_runtime.py",
+        "options_copilot/ranking/__init__.py",
+        "options_copilot/ranking/basis.py",
+        "options_copilot/ranking/evidence_manifest.py",
+        "options_copilot/ranking/portfolio.py",
+        "options_copilot/ranking/store.py",
+        "options_copilot/risk/__init__.py",
+        "options_copilot/risk/resolver.py",
+        "options_copilot/runtime.py",
+        "tests/options_copilot/test_api.py",
+        "tests/options_copilot/test_api_frontend.py",
+        "tests/options_copilot/test_approval_store.py",
+        "tests/options_copilot/test_frontend_contract.py",
+        "tests/options_copilot/test_learning_frontend.py",
+        "tests/options_copilot/test_learning_runtime_api.py",
+        "tests/options_copilot/test_news_option_frontend.py",
+        "tests/options_copilot/test_news_preselection_runtime.py",
+        "tests/options_copilot/test_news_reaction_frontend.py",
+        "tests/options_copilot/test_news_runtime.py",
+        "tests/options_copilot/test_news_runtime_official_calendar.py",
+        "tests/options_copilot/test_news_runtime_reaction.py",
+        "tests/options_copilot/test_official_calendar_api_projection.py",
+        "tests/options_copilot/test_p6_api_gui.py",
+        "tests/options_copilot/test_production_candidate_e2e.py",
+        "tests/options_copilot/test_production_runtime.py",
+        "tests/options_copilot/test_ranking_store.py",
+        "tests/options_copilot/test_risk_authority_resolver.py",
+        "tests/options_copilot/test_runtime.py",
+        "tests/options_copilot/test_runtime_pipeline.py",
+        "tests/options_copilot/test_runtime_wiring_completeness.py"
+      ]
+    },
+    "P7": {
+      "plans": [
+        "P7-01",
+        "P7-02"
+      ],
+      "allowlist": [
+        "data/options_copilot/evidence/checkpoints/P7/creator-live/",
+        "options_copilot/README.md",
+        "options_copilot/bridge/__main__.py",
+        "options_copilot/bridge/coordinator.py",
+        "options_copilot/bridge/creator_adapter.py",
+        "options_copilot/bridge/store.py",
+        "tests/options_copilot/test_bridge_coordinator.py",
+        "tests/options_copilot/test_creator_adapter.py",
+        "tests/options_copilot/test_gld_creator_e2e.py"
+      ]
+    },
+    "P8": {
+      "plans": [
+        "P8-01",
+        "P8-02",
+        "P8-03"
+      ],
+      "allowlist": [
+        "data/options_copilot/evidence/checkpoints/P8/independence-spec/",
+        "options_copilot/governance/independence_spec.v1.json",
+        "options_copilot/learning/outcomes.py",
+        "options_copilot/replay/dataset.py",
+        "options_copilot/replay/engine.py",
+        "options_copilot/storage/canonical.py",
+        "options_copilot/storage/ledger.py",
+        "tests/options_copilot/test_learning_storage_approval.py",
+        "tests/options_copilot/test_outcomes.py",
+        "tests/options_copilot/test_replay.py"
+      ]
+    },
+    "P9": {
+      "plans": [
+        "P9-01",
+        "P9-02"
+      ],
+      "allowlist": [
+        "data/options_copilot/evidence/checkpoints/P9/a-grade-decision/",
+        "data/options_copilot/governance/a_grade_markers/",
+        "data/options_copilot/governance/policy_authority.sqlite3",
+        "data/options_copilot/governance/promotion_authorities/",
+        "data/options_copilot/governance/rollback_authorities/",
+        "options_copilot/AI_SPEC.md",
+        "options_copilot/api/app.py",
+        "options_copilot/frontend/app.js",
+        "options_copilot/learning/evaluation.py",
+        "options_copilot/learning/governance.py",
+        "options_copilot/learning/governance_cli.py",
+        "options_copilot/learning/markers.py",
+        "options_copilot/learning/policy_authority.py",
+        "options_copilot/learning/similarity.py",
+        "options_copilot/risk/authorization.py",
+        "options_copilot/runtime.py",
+        "tests/options_copilot/test_a_grade_creator_e2e.py",
+        "tests/options_copilot/test_a_grade_marker.py",
+        "tests/options_copilot/test_api_frontend.py",
+        "tests/options_copilot/test_learning_evaluation.py",
+        "tests/options_copilot/test_policy_authority.py"
+      ]
+    },
+    "P10": {
+      "plans": [
+        "P10-01",
+        "P10-02"
+      ],
+      "allowlist": [
+        "data/options_copilot/evidence/checkpoints/P10/process-ports-tailscale/",
+        "data/options_copilot/evidence/checkpoints/P10/rollout/",
+        "options_copilot/api/app.py",
+        "options_copilot/operations/migrations.md",
+        "options_copilot/operations/monitoring.py",
+        "options_copilot/operations/readiness.py",
+        "options_copilot/operations/runbook.md",
+        "scripts/start_options_copilot.ps1",
+        "tests/options_copilot/test_process_operations.py",
+        "tests/options_copilot/test_readiness_cli.py"
+      ]
+    }
+  }
+}

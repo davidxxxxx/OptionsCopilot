@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>期权副驾 OptionsCopilot</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>期权副驾</h1>
+      <span class="sub">新闻 → 观点 → IBKR 期权 → 每日排名（只读，不下单）</span>
+    </div>
+    <div class="clock" id="clock">—</div>
+    <div class="chips" id="chips"></div>
+    <button id="notification-button" type="button">开启事件提醒</button>
+    <button id="run-button" type="button">立即运行</button>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button type="button" data-tab="ideas" class="active">今日推荐</button>
+    <button type="button" data-tab="views">观点</button>
+    <button type="button" data-tab="news">新闻</button>
+    <button type="button" data-tab="earnings">日历</button>
+    <button type="button" data-tab="positions">持仓</button>
+    <button type="button" data-tab="tracking">复盘</button>
+    <button type="button" data-tab="runs">运行记录</button>
+  </nav>
+
+  <main>
+    <section id="tab-ideas" class="tab active">
+      <div class="card" id="run-card">
+        <div class="card-head">
+          <h2>最近一次运行</h2>
+          <span id="run-meta" class="muted">—</span>
+        </div>
+        <div id="stage-list" class="stages"></div>
+        <p id="run-error" class="error hidden"></p>
+        <ul id="position-alerts" class="alerts hidden"></ul>
+        <p id="major-events-banner" class="muted hidden"></p>
+        <p id="event-run-banner" class="event-banner hidden"></p>
+      </div>
+      <div class="card">
+        <h2>宏观与市场主线</h2>
+        <p id="macro" class="macro muted">暂无</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>如果同时持有</h2>
+          <span class="muted">按建议张数汇总；压力测试为 1 天 Black-Scholes 情景估值</span>
+        </div>
+        <div id="combined-exposure" class="stages"></div>
+        <div class="table-wrap">
+          <table id="stress-table">
+            <thead><tr><th>情景</th><th class="num">现有持仓</th><th class="num">本次推荐</th><th class="num">合计</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Top 10 期权组合</h2>
+          <span class="muted">按“期望优势 / 最大亏损”排序；期望优势 = 你的观点相对市场定价的优势，已扣滑点和手续费；点击行查看细节</span>
+        </div>
+        <p id="news-calibration-line" class="muted">新闻观点校准：—</p>
+        <div class="table-wrap">
+          <table id="ideas-table">
+            <thead><tr>
+              <th>#</th><th>状态</th><th>标的</th><th>观点</th><th>结构</th><th>到期</th><th>组合</th>
+              <th class="num">净权利金</th><th class="num">最大亏损</th><th class="num">最大盈利</th>
+              <th class="num">盈亏比</th><th>盈亏平衡</th><th class="num">胜率 观点/市场</th>
+              <th class="num">期望优势</th><th class="num">预计净收益（保守）</th><th class="num">建议张数</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="ideas-empty" class="muted hidden"></p>
+        <div id="ideas-dropped" class="dropped hidden"></div>
+        <div id="idea-detail" class="detail hidden"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>观察清单（价格到位再评估）</h2>
+          <span class="muted">仅作下一次重新测算的提示，不是推荐，也不计入纸面跟踪</span>
+        </div>
+        <div class="table-wrap">
+          <table id="watchlist-table">
+            <thead><tr>
+              <th>标的</th><th>结构</th><th>组合</th><th class="num">当前净价</th>
+              <th>触发条件</th><th>失效条件</th><th>观察至</th><th>状态</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="watchlist-empty" class="muted">当前没有接近入选价格或等待事件结束的组合。</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>规则推荐：卖指数时间价值</h2>
+          <span class="muted">独立于 Top 10；仅在 IV−HV、事件静默期和风险预算均满足时列出</span>
+        </div>
+        <div id="vrp-conditions" class="tags"></div>
+        <div class="table-wrap">
+          <table id="vrp-ideas-table">
+            <thead><tr>
+              <th>#</th><th>状态</th><th>标的</th><th>观点</th><th>结构</th><th>到期</th><th>组合</th>
+              <th class="num">净权利金</th><th class="num">最大亏损</th><th class="num">最大盈利</th>
+              <th class="num">盈亏比</th><th>盈亏平衡</th><th class="num">胜率 观点/市场</th>
+              <th class="num">期望优势</th><th class="num">预计净收益（保守）</th><th class="num">建议张数</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="vrp-ideas-empty" class="muted">当前没有满足条件的 VRP 组合。</p>
+      </div>
+    </section>
+
+    <section id="tab-views" class="tab">
+      <div class="card">
+        <div class="card-head">
+          <h2>观点账本</h2>
+          <span class="muted">由已分类新闻按固定规则计算：证据分 = Σ 方向 × 力度 × 重要性 × 时间衰减；超过阈值才建立观点，跌破更低阈值才结束</span>
+        </div>
+        <div class="table-wrap">
+          <table id="views-table">
+            <thead><tr>
+              <th>标的</th><th>方向</th><th>信心</th><th class="num">证据分</th><th class="num">波动分</th>
+              <th class="num">预期偏移</th><th class="num">周期(天)</th><th>波动</th><th>催化剂</th>
+              <th>建立于</th><th>主要依据</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="views-empty" class="muted hidden">暂无观点：还没有足够的已分类新闻证据。</p>
+      </div>
+      <div class="card">
+        <h2>观点变化记录</h2>
+        <div class="table-wrap">
+          <table id="view-changes-table">
+            <thead><tr><th>时间</th><th>标的</th><th>变化</th><th>之前 → 之后</th><th>触发的新闻</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>事件测算</h2>
+          <span class="muted">统计关联，不是因果；样本少，结论以复盘为准</span>
+        </div>
+        <p id="event-study-head" class="muted">暂无近期重大事件测算。</p>
+        <p id="event-study-caveat" class="muted hidden"></p>
+        <p id="event-study-thresholds" class="muted"></p>
+        <p id="event-study-next" class="muted"></p>
+        <div class="table-wrap">
+          <table id="event-study-table">
+            <thead><tr>
+              <th>标的</th><th class="num">历史次数</th><th class="num">开盘跳空 每σ</th>
+              <th class="num">开盘后 每σ</th><th class="num">t 值</th>
+              <th class="num">前半 t</th><th class="num">后半 t</th><th>稳定</th>
+              <th class="num">滚动命中率</th><th>滚动门槛</th><th class="num">本次预计</th>
+              <th class="num">事件日/平日波动比</th><th>是否生成观点</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <h3>事件组合（独立于 Top 10）</h3>
+        <div class="table-wrap">
+          <table id="event-ideas-table">
+            <thead><tr>
+              <th>#</th><th>状态</th><th>标的</th><th>观点</th><th>结构</th><th>到期</th><th>组合</th>
+              <th class="num">净权利金</th><th class="num">最大亏损</th><th class="num">最大盈利</th>
+              <th class="num">盈亏比</th><th>盈亏平衡</th><th class="num">胜率 观点/市场</th>
+              <th class="num">期望优势</th><th class="num">预计净收益（保守）</th><th class="num">建议张数</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="event-ideas-empty" class="muted">暂无符合条件的事件组合。</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>市场状态（由 CBOE 期权链计算，每日留存；暂不参与排序）</h2>
+          <span class="muted">自有 IV 分位至少需要 20 个交易日样本</span>
+        </div>
+        <div class="table-wrap">
+          <table id="market-state-table">
+            <thead><tr>
+              <th>标的</th><th class="num">现价</th><th class="num">IV30</th><th class="num">IV90</th>
+              <th class="num">期限斜率</th><th class="num">25Δ偏斜</th><th class="num">25Δ蝶式</th>
+              <th class="num">IV−HV20</th><th class="num">GEX</th><th class="num">GEX 符号</th>
+              <th class="num">Call Wall</th><th class="num">Put Wall</th><th class="num">Max Pain</th><th>OPEX</th>
+              <th class="num">认沽/认购持仓比</th>
+              <th class="num">自有 IV 分位</th><th>更新时间</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="market-state-empty" class="muted hidden">暂无市场状态记录。</p>
+      </div>
+    </section>
+
+    <section id="tab-news" class="tab">
+      <div class="card">
+        <div class="card-head">
+          <h2>新闻流（24 小时）</h2>
+          <div class="filters">
+            <select id="news-source">
+              <option value="">全部来源</option>
+              <option value="jin10">金十</option>
+              <option value="finnhub">Finnhub</option>
+            </select>
+            <select id="news-importance">
+              <option value="0">全部重要性</option>
+              <option value="1">重要性 ≥ 1</option>
+              <option value="2" selected>重要性 ≥ 2</option>
+              <option value="3">只看 3（重大）</option>
+            </select>
+            <select id="news-category"><option value="">全部类别</option></select>
+            <input id="news-symbol" type="text" placeholder="标的，如 NVDA" maxlength="5">
+          </div>
+        </div>
+        <ul id="news-list" class="news"></ul>
+      </div>
+    </section>
+
+    <section id="tab-earnings" class="tab">
+      <div class="card">
+        <div class="card-head">
+          <h2>宏观事件（美国）</h2>
+          <div class="filters">
+            <select id="calendar-importance">
+              <option value="major">只看重大</option>
+              <option value="2">重要性≥2</option>
+              <option value="0">全部</option>
+            </select>
+            <select id="calendar-days">
+              <option value="7">未来 7 天</option>
+              <option value="14" selected>未来 14 天</option>
+              <option value="30">未来 30 天</option>
+              <option value="70">未来 70 天</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="macro-events-table">
+            <thead><tr>
+              <th>北京时间</th><th>纽约时间</th><th>事件</th><th>周期</th><th>重要性</th>
+              <th>预期</th><th>前值</th><th>公布值</th><th>SPY/QQQ/TLT 事件波动比</th><th>来源</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="macro-events-empty" class="muted hidden">所选范围内暂无宏观事件。</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>事件反应记录（系统从每次公布中学习）</h2>
+          <div class="filters">
+            <select id="reaction-category">
+              <option value="cpi">CPI 通胀</option>
+              <option value="ppi">PPI 生产者价格</option>
+              <option value="nfp">非农就业</option>
+              <option value="pce">PCE 通胀</option>
+              <option value="retail_sales">零售销售</option>
+              <option value="gdp">GDP</option>
+              <option value="fomc_decision">美联储决议</option>
+            </select>
+            <select id="reaction-symbol">
+              <option value="SPY" selected>SPY</option><option value="QQQ">QQQ</option>
+              <option value="IWM">IWM</option><option value="DIA">DIA</option>
+              <option value="TLT">TLT</option><option value="GLD">GLD</option>
+              <option value="HYG">HYG</option><option value="XLF">XLF</option>
+              <option value="XLK">XLK</option><option value="XLE">XLE</option>
+              <option value="XLU">XLU</option><option value="XLY">XLY</option>
+              <option value="XLP">XLP</option><option value="XLV">XLV</option>
+              <option value="XLI">XLI</option><option value="SMH">SMH</option>
+              <option value="KRE">KRE</option><option value="XHB">XHB</option>
+            </select>
+          </div>
+        </div>
+        <p id="reaction-summary" class="muted">暂无事件反应记录。</p>
+        <div class="table-wrap">
+          <table id="event-reactions-table">
+            <thead><tr>
+              <th>日期</th><th>实际/预期</th><th class="num">超预期 σ</th>
+              <th class="num">开盘跳空</th><th class="num">开盘后（或次日）</th>
+              <th class="num">当时预测</th><th>方向是否命中</th><th class="num">IV 变化</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="muted">统计关联，不是因果；小样本和市场环境变化都可能使历史关系失效。</p>
+      </div>
+      <div class="card">
+        <h2>未来 10 天财报（自选池内）</h2>
+        <div class="table-wrap">
+          <table id="earnings-table">
+            <thead><tr><th>日期</th><th>标的</th><th>时段</th><th class="num">EPS 预期</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-positions" class="tab">
+      <div class="card">
+        <div class="card-head">
+          <h2>持仓风险与提醒</h2>
+          <span id="risk-meta" class="muted">—</span>
+        </div>
+        <div class="table-wrap">
+          <table id="groups-table">
+            <thead><tr>
+              <th>标的</th><th>组合腿</th><th>到期</th><th class="num">成本</th><th class="num">现值</th>
+              <th class="num">盈亏</th><th class="num">最大亏损</th><th class="num">最大盈利</th><th>提醒</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="groups-empty" class="muted hidden">没有期权持仓。</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>账户与持仓（原始）</h2>
+          <span id="account-meta" class="muted">来自最近一次连上 IBKR 的运行</span>
+        </div>
+        <div class="table-wrap">
+          <table id="positions-table">
+            <thead><tr><th>合约</th><th>类型</th><th class="num">数量</th><th class="num">平均成本</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-tracking" class="tab">
+      <div class="card">
+        <div class="card-head">
+          <h2>推荐复盘（纸面跟踪）</h2>
+          <span class="muted">每个首次进入推荐列表的组合（包括你没下单的）按当时估算成交价记 1 组，之后每次运行用 CBOE 报价重新估值，按规则模拟平仓：止盈/止损阈值同持仓提醒；入场时距到期超过 7 天的在剩 7 天时平仓，否则持有到期。这是纸面结果，不是实盘，不含提前指派等情况。</span>
+        </div>
+        <div id="tracking-summary" class="stages"></div>
+        <p id="tracking-sample" class="muted"></p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>来源有效性、归因与基准</h2>
+          <span class="muted">仅含非近似结算；实际成交与模拟推荐分开统计</span>
+        </div>
+        <div class="table-wrap">
+          <table id="origin-quality-table">
+            <thead><tr><th>来源</th><th>结论</th><th class="num">样本</th><th class="num">平均收益风险比</th><th>95% CI</th><th class="num">方向命中</th><th>归因 / 超额</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>分组表现</h2>
+          <select id="tracking-group">
+            <option value="by_origin">来源</option>
+            <option value="by_structure">结构</option>
+            <option value="by_edge_bucket">期望优势区间</option>
+            <option value="by_conviction">信心</option>
+            <option value="by_params_version">参数版本</option>
+            <option value="by_macro_event">是否跨越重大事件</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table id="tracking-groups-table">
+            <thead><tr><th>分组</th><th class="num">笔数</th><th class="num">胜率</th><th class="num">累计盈亏</th><th class="num">收益风险比</th><th class="num">预测优势率</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>期权资金流检验</h2>
+          <span class="muted">仅做历史测量，不参与观点、候选或排序</span>
+        </div>
+        <div id="flow-study-summary" class="stages"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>新闻观点校准（漂移与波动）</h2>
+          <span id="news-calibration-status" class="muted">—</span>
+        </div>
+        <div id="news-calibration-summary" class="stages"></div>
+        <div class="table-wrap">
+          <table id="news-calibration-table">
+            <thead><tr><th>信心</th><th class="num">样本</th><th class="num">天数</th><th class="num">k</th><th class="num">sd</th><th class="num">命中率</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>跟踪记录</h2>
+          <select id="tracking-status">
+            <option value="all">全部</option>
+            <option value="open">持有中</option>
+            <option value="closed">已平仓</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table id="tracking-table">
+            <thead><tr>
+              <th>入选时间</th><th>标的</th><th>结构</th><th>组合</th><th>来源</th>
+              <th class="num">入场净权利金</th><th class="num">最大亏损</th><th class="num">预测优势率</th>
+              <th class="num">盈亏（当前或平仓）</th><th class="num">收益/风险</th><th>状态</th><th>参数版本</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="tracking-empty" class="muted hidden">暂无跟踪记录。</p>
+        <div id="tracking-detail" class="detail hidden"></div>
+      </div>
+    </section>
+
+    <section id="tab-runs" class="tab">
+      <div class="card">
+        <h2>分钟数据存档</h2>
+        <div class="table-wrap">
+          <table id="intraday-status-table">
+            <thead><tr>
+              <th>来源</th><th class="num">品种数</th><th class="num">天数</th>
+              <th>最近日期</th><th>最近抓取</th><th>最近错误</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h2>运行记录</h2>
+        <div class="table-wrap">
+          <table id="runs-table">
+            <thead><tr>
+              <th>ID</th><th>交易日</th><th>时段</th><th>触发</th><th>状态</th>
+              <th>IBKR</th><th>观点</th><th class="num">推荐数</th><th>开始</th><th>错误</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer muted">
+    研究工具，不构成投资建议；系统只读 IBKR，永不下单。下单前请在 TWS 中核对实时报价。
+  </footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,143 @@
+{
+  "actor": "human:xujie",
+  "contract_hash": "536a938ed773c606ac8c80e6c6a2046f68dff3ee41d43ae599743194ef2dbedd",
+  "contract_kind": "STRATEGY_NAV",
+  "effective_at": "2026-08-02T22:58:59.193424+00:00",
+  "payload": {
+    "account_nlv_policy": {
+      "fallback_when_contract_or_ledger_invalid": false,
+      "risk_input": false,
+      "role": "OBSERVATION_AND_RECONCILIATION_ONLY",
+      "substitute_for_strategy_nav": false
+    },
+    "account_reference": "ibkr-primary-options-account",
+    "anchor": {
+      "amount": "2012.44",
+      "currency": "USD",
+      "effective_at": "2026-08-02T22:58:59.193424Z",
+      "existing_gld_principal_nav_delta": "0",
+      "open_gld_embedded": true,
+      "source_artifact": "G:\\quantumtrading\\data\\options_copilot\\runtime_snapshot.json",
+      "source_hash": "2987562e70f6e0c5b228cf136305c4981714a0fe611cedcdff8bada7cc2300f0"
+    },
+    "attribution": {
+      "allowed_values": [
+        "STRATEGY",
+        "NON_STRATEGY"
+      ],
+      "fees": "inherit the related position or fill attribution; STRATEGY fees are positive magnitudes subtracted by the equation",
+      "fills": "STRATEGY only when the complete Options Copilot approval, IBKR confirmation, and broker-fill chain is proven",
+      "future_activity": {
+        "all_other_identified_activity": "NON_STRATEGY_UNLESS_SEPARATELY_SIGNED",
+        "automatic_strategy_attribution_requires_all": [
+          "instruction originated from Options Copilot",
+          "GUI approval was explicitly made by human:xujie",
+          "human:xujie finally confirmed the instruction in IBKR",
+          "an authoritative broker fill was observed"
+        ],
+        "incomplete_or_unknown_attribution": "INVALIDATE_NAV_AND_BLOCK_RISK_AUTHORIZATION"
+      },
+      "gld_legacy": {
+        "attribution": "STRATEGY",
+        "closing_realized_pnl": "INCLUDE",
+        "double_counting": "PROHIBITED_FOR_ANY_VALUE_ALREADY_EMBEDDED_IN_ANCHOR",
+        "existing_principal_nav_delta": "0",
+        "post_anchor_fees": "INCLUDE",
+        "post_anchor_mark_changes": "INCLUDE",
+        "reason": "open legacy combination is embedded in the signed anchor"
+      },
+      "positions": "inherit attribution only from fully evidenced fills or a separate signed attribution",
+      "realized_pnl": "inherit the related position attribution; gains are positive and losses are negative",
+      "unknown_behavior": "FAIL_CLOSED_AND_BLOCK_RISK_AUTHORIZATION",
+      "unrealized_pnl": "inherit the related open position attribution and use only its latest valid mark; anchor-embedded GLD contributes only post-anchor change",
+      "wdc_legacy": {
+        "attribution": "NON_STRATEGY",
+        "nav_delta_after_anchor": "0",
+        "reason": "historical external legacy outcome completed before anchor"
+      }
+    },
+    "capital_flows": {
+      "broker_posting_time_may_be_assumed": false,
+      "default_nav_delta": "0",
+      "deposits_default_attribution": "NON_STRATEGY",
+      "effective_at_rule": "use the separately signed strategy capital-flow adjustment record's explicit timezone-aware effective_at",
+      "missing_or_naive_effective_at": "INVALIDATE_NAV_AND_BLOCK_RISK_AUTHORIZATION",
+      "strategy_adjustment_requires_separate_signature": true,
+      "strategy_deposit_sign": "+",
+      "strategy_withdrawal_sign": "-",
+      "withdrawals_default_attribution": "NON_STRATEGY"
+    },
+    "conflict_policy": {
+      "conflict_result": "INVALID_STRATEGY_NAV",
+      "nlv_fallback": "PROHIBITED",
+      "risk_authorization": "BLOCKED"
+    },
+    "consumer_gates": {
+      "P1": "BLOCKED_UNLESS_THIS_CONTRACT_AND_APPROVAL_EVIDENCE_VALIDATE",
+      "hash_or_identity_mismatch": "BLOCK_RISK_AUTHORIZATION",
+      "missing_approval": "BLOCK_P1"
+    },
+    "contract_id": "strategy-nav.v1",
+    "correction_policy": {
+      "broken_or_ambiguous_chain": "INVALIDATE_NAV_AND_BLOCK_RISK_AUTHORIZATION",
+      "delete_prior": false,
+      "effective_ledger_rule": "use the latest valid superseding version for each corrected logical event",
+      "mode": "APPEND_ONLY",
+      "overwrite_prior": false,
+      "requires": [
+        "new version",
+        "supersedes_version",
+        "supersedes_hash",
+        "actor",
+        "signed_at",
+        "new contract_hash"
+      ]
+    },
+    "currency": "USD",
+    "decimal_equation": {
+      "account_nlv_counted": false,
+      "event_precision": "retain full Decimal precision",
+      "expression": "NAV(t)=quantize(anchor + strategy_deposits - strategy_withdrawals + realized_PnL + latest_open_position_unrealized_PnL - fees + signed_corrections)",
+      "fill_principal_counted": false,
+      "non_strategy_contribution": "0",
+      "quantize_stage": "FINAL_SNAPSHOT_ONLY",
+      "quantum": "0.01",
+      "rounding": "ROUND_HALF_EVEN"
+    },
+    "fill_accounting": {
+      "double_counting": "PROHIBITED",
+      "economic_change_sources": [
+        "realized_PnL",
+        "latest_open_position_unrealized_PnL",
+        "fees"
+      ],
+      "fill_principal_nav_delta": "0"
+    },
+    "idempotency": {
+      "content_hash_algorithm": "sha256(canonical_json(event_content_without_content_hash))",
+      "flow_id_algorithm": "sha256(canonical_json(identity_fields))",
+      "identity_fields_in_order": [
+        "account_reference",
+        "broker_event_kind",
+        "broker_event_identifier",
+        "effective_at"
+      ],
+      "same_flow_id_different_content_hash": "CONFLICT",
+      "same_flow_id_same_content_hash": "IDEMPOTENT_RETURN_EXISTING_RECEIPT"
+    },
+    "purpose": "sole signed Strategy NAV authority for risk; account NLV is reconciliation only"
+  },
+  "provenance": {
+    "account_reference": "ibkr-primary-options-account",
+    "observed_at": "2026-08-02T22:58:59.193424+00:00",
+    "source": "G:\\quantumtrading\\data\\options_copilot\\runtime_snapshot.json",
+    "source_hash": "2987562e70f6e0c5b228cf136305c4981714a0fe611cedcdff8bada7cc2300f0",
+    "source_hash_algorithm": "SHA-256",
+    "source_hash_verified_at": "2026-08-03T14:23:12.032775Z"
+  },
+  "schema": "options_copilot.governance.signed_contract.v1",
+  "signed_at": "2026-08-03T14:23:12.038767+00:00",
+  "supersedes_hash": null,
+  "supersedes_version": null,
+  "version": "v1"
+}

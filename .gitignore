@@ -59,3 +59,9 @@ secrets.dpapi.json
 /options_copilot/governance/strategy_nav_contract.v1.json
 /options_copilot/governance/execution_cost_contract.v1.json
 /options_copilot/governance/initial_champion_scenario_policy.v1.json
+
+# Thin-core rebuild: local secrets and runtime data
+/secrets/
+/config/copilot.local.toml
+/data/
+/.claude/launch.json
